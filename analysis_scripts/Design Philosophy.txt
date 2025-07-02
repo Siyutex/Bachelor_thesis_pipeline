@@ -1,0 +1,19 @@
+General design: 
+	- name all folder with "_" and standard english letters to avoid messed up pathing
+	- Relative filepaths
+		- use "/" instead of "\" as the latter is an escape character in
+	  python
+	- use functions
+	- explain everything with comments
+	- pipeline executor files to run pipeline in modules
+
+
+Error Handling Philosophy for Thesis & Reusable Code
+
+    ✅ Add minimal, practical error checks (e.g., missing files, wrong paths)
+
+    ✅ Provide clear, readable error messages for common user mistakes
+
+    ✅ Prioritize code I can reliably re-run months later without debugging (this is why comments and error handling are important)
+
+    ✅ Keep GitHub repos clean and understandable to show competence, but avoid over-engineering
