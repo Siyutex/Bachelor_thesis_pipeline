@@ -12,7 +12,7 @@ import os
 raw_data_dir = sys.argv[1] if len(sys.argv) > 1 else print("Preprocessing: Please provide the path to the raw data directory. It must contain mtx and tsv files from the 10x genomics pipeline") # needed for read_10x_mtx to find the tsv files with gene names and cell barcodes
 output_path = sys.argv[2] if len(sys.argv) > 2 else print("Preprocessing: Please provide the path to save the output file.") # path to save the output file, will be saved as h5ad file (AnnData object)
 
-adata = sc.read_10x_mtx(raw_data_dir)  # read mtx file, and tsv files, returns AnnData object
+adata = sc.read_10x_mtx(raw_data_dir)  # read mtx file, and tsv files from the current folder in the data directory returns AnnData object
 
 
 # preprocessing
