@@ -37,7 +37,7 @@ def preprocess_data():
         # skip temp folder, folders that do not contain mtx files and check if the folder is a directory
         if os.path.join(raw_data_dir, folder) != os.path.join(raw_data_dir, "temp"):
             print("Currently preprocessing: " +  folder)
-            output_path = os.path.join(script_dir, "..", "..", "Data", "temp", "preprocessed", f"preprocessed_{folder}")  # output path for preprocessed files with a prefix in a subdirectory of temp directory
+            output_path = os.path.join(temp_dir, "preprocessed", f"preprocessed_{folder}")  # output path for preprocessed files with a prefix in a subdirectory of temp directory
             subprocess.run(["python", os.path.join(script_dir, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_path], check=True) # check=True ensures that an error in the subprocess will raise an exception
         else:
             print(f"Preprocessing: Skipping folder {folder} as it does not contain mtx files or is the temp directory.")
@@ -47,15 +47,42 @@ def preprocess_data():
 def isolate_epithelial_cells():
     """Loops through the preprocessed h5ad files in temp/preprocessed and runs Epithelial_cell_isolation.py on each."""
 
+    # check if temp directory has epithelial_isolated folder, if not create it
+    if not os.path.exists(os.path.join(temp_dir, "epithelial_isolated")):  # check if temp directory has epithelial_isolated folder
+        os.makedirs(os.path.join(temp_dir, "epithelial_isolated"))  # create epithelial_isolated folder if it does not exist
+
     for file in os.listdir(os.path.join(temp_dir, "preprocessed")):  # iterate over files in the temp directory where preprocessed files are stored
         if file.endswith(".h5ad"): # check if the file is an h5ad file
             (print("Currently isolating epithelial cells from: " + file))
             file_path = os.path.join(temp_dir, "preprocessed", file)
-            output_path = os.path.join(temp_dir, f"epithelial_isolated_{file}") # save output in the temp directory with another new prefix
+            output_path = os.path.join(temp_dir, "epithelial_isolated", f"epithelial_isolated_{file}") # save output in the temp directory with another new prefix
             subprocess.run(["python", os.path.join(script_dir, "Epithelial_cell_isolation.py"), file_path, output_path], check=True) # check=True ensures that an error in the subprocess will raise an exception
         else:
             print(f"Epithelial_isolation: Skipping file {file} as it is not a .h5ad file.")
 
+
+
+def compute_variance():
+    """Loops through the epithelial isolated h5ad files in temp/epithelial_isolated and runs Variance.py on each."""
+
+    ADJ_paths = []  # list to store paths to tumor adjacent tissue files
+    PDAC_paths = []  # list to store paths to tumor tissue files
+
+    for file in os.listdir(os.path.join(temp_dir, "epithelial_isolated")):  # iterate over files in the temp directory where epithelial isolated files are stored
+        if file.endswith(".h5ad") and "ADJ" in file:  # check if the file is a h5ad file and tumor adjacent tissue
+            ADJ_paths.append(os.path.join(temp_dir, "epithelial_isolated", file))  # add the file path to the list
+        elif file.endswith(".h5ad") and "PDAC" in file:  # check if the file is a h5ad file and tumor tissue
+            PDAC_paths.append(os.path.join(temp_dir, "epithelial_isolated", file))
+        else:
+            print(f"Variance: Skipping file {file} as it is not a .h5ad.gz file.")
+
+    ADJ_paths = ",".join(ADJ_paths)  # join the list of paths into a single string separated by commas (so it can be passed as a command line argument)
+    PDAC_paths = ",".join(PDAC_paths)
+
+    subprocess.run(["python", os.path.join(script_dir, "Variance.py"), ADJ_paths, PDAC_paths], check=True)
+            
+
+
+
 if __name__ == "__main__": # ensures this code runs only when this script is executed directly, not when imported
-    preprocess_data()
-    isolate_epithelial_cells()
+    compute_variance()  # run the variance computation pipeline

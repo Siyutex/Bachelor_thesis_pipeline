@@ -21,6 +21,10 @@ if 'EPCAM' in adata.var_names:  # check if EPCAM gene is present in the data
     selected_cells = epcam_expr > threshold
     adata_epithelial = adata[selected_cells].copy()
     print(f"Number of epithelial cells isolated: {adata_epithelial.shape[0]}")
+
+    # save the isolated epithelial cells to a new h5ad file
+    adata_epithelial.write(output_path)
 else:
     print(f"EPCAM gene not found in the data. No epithelial cells isolated from {input_path}.")
     adata_epithelial = adata.copy()
+
