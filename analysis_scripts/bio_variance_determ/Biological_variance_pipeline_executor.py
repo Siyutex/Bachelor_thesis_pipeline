@@ -14,7 +14,7 @@ if not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "..", "Data"
 
 # declare script directory and mtx directory as global constants
 script_dir = os.path.dirname(__file__)  # directory where this script is located
-raw_data_dir = os.path.join(script_dir, "..", "..", "Data")  # directory where mtx files are located
+raw_data_dir = os.path.join(script_dir, "..", "..", "Data", "OG_PDAC_and_Pancreas")  # directory where mtx files are located
 temp_dir = os.path.join(script_dir, "..", "..", "Data", "temp")  # directory for temporary files
 
 # functions
@@ -85,4 +85,5 @@ def compute_variance():
 
 
 if __name__ == "__main__": # ensures this code runs only when this script is executed directly, not when imported
-    compute_variance()  # run the variance computation pipeline
+    preprocess_data()
+    isolate_epithelial_cells()
