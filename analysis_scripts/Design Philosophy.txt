@@ -6,6 +6,13 @@ General design:
 	- use functions
 	- explain everything with comments
 	- pipeline executor files to run pipeline in modules
+	- pipeline executor handles conditionals (eg differing folder structures), then have 
+	  different subprocesses for each condition, no conditionals in subprocesses.
+	  The pipeline executor is the master brain, the subprocesses are just workers
+	  --> easier bugfixing
+	- BUT: subprocesses should be able to handle different file types (for example)
+	  with the instruction on which one to do coming as an argument from the executor
+	  so it remains in charge of decision making
 
 
 Error Handling Philosophy for Thesis & Reusable Code
