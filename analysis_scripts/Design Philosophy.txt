@@ -13,6 +13,10 @@ General design:
 	- BUT: subprocesses should be able to handle different file types (for example)
 	  with the instruction on which one to do coming as an argument from the executor
 	  so it remains in charge of decision making
+	- data is parsed between executor and subprocesses as either a serialzed JSON object 
+	  or as a filepath to a resulting temporary file in /tmp 
+	- temporary files can be permanently saved to a copy if specified
+	- all termporary files are automatically delete after the pipeline finishes
 
 
 Error Handling Philosophy for Thesis & Reusable Code

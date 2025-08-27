@@ -1,5 +1,10 @@
-# This script removes trash data from the mtx files, which are used in the biological variance determination pipeline.
-# (eg RNAs that are rarely expressed, cells with low quality, etc.)
+# removes:
+"""
+Cells with less than 500 genes expressed
+Genes expressed in less than 10 cells
+Cells with less than 1000 UMI counts
+Cells with high mitochondrial gene expression (>25%)"""
+# and log normalizes the data (per 10K counts, log1p)
 
 # the mtx files from NCBI GEO are minimally processed (10x genomics), they contain UMI counts for all cells, including those that are not epithelial cells, and those that are not of high quality. This script removes those cells and RNAs that are not of interest.
 # preprocessing similar to paper where data was generated, see https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE212966#:~:text=Summary%20Pancreatic%20ductal%20adenocarcinoma%20,plot%20to%20predict%20the%20overall
@@ -7,12 +12,33 @@
 import scanpy as sc
 import sys
 import os
+import tempfile
+import tarfile
+import pandas as pd
 
-# import mtx file and automatically find tsv files with gene names and cell barcodes
-raw_data_dir = sys.argv[1] if len(sys.argv) > 1 else print("Preprocessing: Please provide the path to the raw data directory. It must contain mtx and tsv files from the 10x genomics pipeline") # needed for read_10x_mtx to find the tsv files with gene names and cell barcodes
-output_path = sys.argv[2] if len(sys.argv) > 2 else print("Preprocessing: Please provide the path to save the output file.") # path to save the output file, will be saved as h5ad file (AnnData object)
+# import command line arguments from ececutor script
+input_data = sys.argv[1] if len(sys.argv) > 1 else print("Preprocessing: Please provide the path to the raw data directory. It must contain mtx and tsv files from the 10x genomics pipeline") # can be a folder or a file, depending on the datatype
+input_data_type = sys.argv[2] if len(sys.argv) > 2 else print("Preprocessing: Please provide the data type. It must be one of the following: MTX_TSVs_in_subfolders, compressed_MTX_TSVs, dot_matrix_files") # string datatype variable to indicate which pipeline mode was chosen in the executor script
+print(input_data_type)
 
-adata = sc.read_10x_mtx(raw_data_dir)  # read mtx file, and tsv files from the current folder in the data directory returns AnnData object
+
+if input_data_type == "MTX_TSVs_in_subfolders":
+    # read mtx file, and tsv files from the current folder in the raw_data directory
+    adata = sc.read_10x_mtx(input_data)  
+elif input_data_type == "compressed_MTX_TSVs_in_subfolders":
+    # extract compressed files to a temporary directory and read them from there
+    with tempfile.TemporaryDirectory() as temp_dir:
+        for file in os.listdir(input_data):
+            if file.endswith(".tar.gz") or file.endswith(".tgz"):
+                file_path = os.path.join(input_data, file)
+                with tarfile.open(file_path, "r:gz") as tar:
+                    tar.extractall(path=temp_dir)
+        adata = sc.read_10x_mtx(temp_dir)
+elif input_data_type == "dot_matrix_files":
+    # directly read the forwarded .matrix file = raw_data
+    temp_df = pd.read_csv(input_data, sep="\t", index_col=0) # rows are genes, columns are cells, need to transpose to fit with annData format
+    adata = sc.AnnData(temp_df.T) # transpose the dataframe to have cells as rows and genes as columns
+
 
 
 # preprocessing
@@ -21,7 +47,7 @@ sc.pp.filter_cells(adata, min_genes=500)  # filter cells with less than 500 gene
 sc.pp.filter_genes(adata, min_cells=10)  # filter genes expressed in less than 10 cells
 
 # remove cells with less than 1000 UMI counts
-adata.obs['n_counts'] = adata.X.sum(axis=1).A1  # convert sparse matrix to dense array and sum counts per cell
+adata.obs['n_counts'] = adata.X.sum(axis=1)  # convert sparse matrix to dense array and sum counts per cell (axis=1 means it looks through all columns(genes) per row(cell))
 adata = adata[adata.obs['n_counts'] > 1000, :]  # keep cells with more than 1000 UMI counts
 
 # remove cells with high mitochondrial gene expression (>25%)
@@ -36,11 +62,16 @@ sc.pp.normalize_total(adata, target_sum=1e4)  # normalize each cell to have a to
 sc.pp.log1p(adata)  # log transform the data
 
 # print to console how many cells and genes are left after preprocessing
-print(f"Preprocessing: {adata.shape[0]} cells and {adata.shape[1]} genes left after preprocessing in file: preprocessed_{raw_data_dir} \n")
+print(f"Preprocessing: {adata.shape[0]} cells and {adata.shape[1]} genes left after preprocessing in file: preprocessed_{input_data} \n")
 
 
-# save the processed data to h5ad file
-os.makedirs(os.path.dirname(output_path), exist_ok=True) # ensure directory exists, if not, create it
-adata.write(output_path + ".h5ad")  # save the AnnData object to h5ad file
+# save the processed data to temporary h5ad file
+os.makedirs(os.path.join(tempfile.gettempdir(), "python"), exist_ok=True)
+output_path = os.path.join(tempfile.gettempdir(), "python", f"preprocessed_{os.path.basename(input_data)}.h5ad")
+adata.write(output_path)
+print(f"Preprocessing: Preprocessed data saved to temporary file: {output_path}")
+
+# foward the path to the temporary file to the executor script via stdout
+print("Output: " + output_path)
 
 
