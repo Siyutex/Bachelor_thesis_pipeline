@@ -24,14 +24,14 @@ if not os.path.exists(os.path.join(tempfile.gettempdir(),"python")):
 
 # declare script directory and mtx directory as global constants
 SCRIPT_DIR = os.path.dirname(__file__)  # directory where this script is located
-RAW_DATA_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data","OG_PDAC_and_Pancreas")  # directory where files / folder with files are located (10x genomics, GDC or cancerSCEM format)
+RAW_DATA_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining","cancerSCEM","colon_cancer_cancerous")  # directory where files / folder with files are located (10x genomics, GDC or cancerSCEM format)
 OUTPUT_STORAGE_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data", "output_storage")  # directory for optional permanent storage of indermediate subprocess outputs
 TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage of temporary pipeline files
 
 
 # variable to determine what intermediate files should be saved permanently, one key per script
 OUTCOME_STORAGE = {
-    "Preprocessing.py": False,
+    "Preprocessing.py": True,
     "Epithelial_cell_isolation.py": False,
     "Variance.py": False
 }
@@ -44,7 +44,6 @@ class pipeline_mode(Enum):
     NO_MODE_CHOSEN = None
 
 # functions
-
 def choose_pipeline_mode():
     """Inspects the structure of the provided RAW_DATA_DIR and returns the appropraote
     pipeline_mode enum value."""
@@ -109,6 +108,7 @@ def execute_subprocess(subprocess_path: str, inputadata_path: str, inputdatatype
             out = line
             print(f"Subprocess {os.path.basename(subprocess_path)}: {out}")
 
+
 def purge_tempfiles():
     # get the system temp directory (e.g. /tmp on Linux, AppData\Local\Temp on Windows)
 
@@ -122,6 +122,7 @@ def purge_tempfiles():
                 shutil.rmtree(file_path)   # delete folder and contents
         except Exception as e:
             print(f"Failed to delete {file_path}: {e}")
+
 
 def preprocess_data(pipeline_mode: pipeline_mode):
     """Loops through the RAW_DATA_DIR and runs Preprocessing.py on each file / folder based on the chosen pipeline mode.
@@ -188,7 +189,6 @@ def isolate_epithelial_cells():
             print(f"Epithelial_isolation: Skipping file {file} as it is not a .h5ad file.")
 
 
-
 def compute_variance():
     """Loops through the epithelial isolated h5ad files in temp/epithelial_isolated and runs Variance.py on each."""
 
@@ -210,6 +210,7 @@ def compute_variance():
             
 
 
+# main loop
 
 if __name__ == "__main__": # ensures this code runs only when this script is executed directly, not when imported
     mode = choose_pipeline_mode()

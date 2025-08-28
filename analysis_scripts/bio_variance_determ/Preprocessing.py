@@ -3,7 +3,9 @@
 Cells with less than 500 genes expressed
 Genes expressed in less than 10 cells
 Cells with less than 1000 UMI counts
-Cells with high mitochondrial gene expression (>25%)"""
+Cells with high mitochondrial gene expression (>25%)
+Genes not calssified as "highly variable" 
+"""
 # and log normalizes the data (per 10K counts, log1p)
 
 # the mtx files from NCBI GEO are minimally processed (10x genomics), they contain UMI counts for all cells, including those that are not epithelial cells, and those that are not of high quality. This script removes those cells and RNAs that are not of interest.
@@ -21,7 +23,6 @@ input_data_path = sys.argv[1] if len(sys.argv) > 1 else print("Please provide th
 output_data_path = sys.argv[2] if len(sys.argv) > 2 else print("Please provide the path to where the output should be saved")
 input_data_type = sys.argv[3] if len(sys.argv) > 3 else print("Please provide the data type. It must be one of the following: MTX_TSVs_in_subfolders, compressed_MTX_TSVs, dot_matrix_files") # string datatype variable to indicate which pipeline mode was chosen in the executor script
 
-print(output_data_path)
 
 if input_data_type == "MTX_TSVs_in_subfolders":
     # read mtx file, and tsv files from the current folder in the raw_data directory
@@ -45,7 +46,7 @@ elif input_data_type == "dot_matrix_files":
 # preprocessing
 
 sc.pp.filter_cells(adata, min_genes=500)  # filter cells with less than 500 genes expressed
-sc.pp.filter_genes(adata, min_cells=10)  # filter genes expressed in less than 10 cells
+sc.pp.filter_genes(adata, min_cells=int(0.01*adata.n_obs))  # filter genes expressed in less than 1% of cells
 
 # remove cells with less than 1000 UMI counts
 adata.obs['n_counts'] = adata.X.sum(axis=1)  # convert sparse matrix to dense array and sum counts per cell (axis=1 means it looks through all columns(genes) per row(cell))
@@ -61,6 +62,11 @@ adata = adata[adata.obs['pct_counts_mito'] < 25, :]
 # log normalize data
 sc.pp.normalize_total(adata, target_sum=1e4)  # normalize each cell to have a total count of 10,000 (eg 1687 UMI counts per cell, actin is 189 UMI counts, so 189/1687 = 0.112, which is 11.2% of the total counts in the cell = 1120 UMI counts per 10,000 UMI counts)
 sc.pp.log1p(adata)  # log transform the data
+
+# isolate highly variable genes (harmony batch correction works in PCA space, meaning non HVGs are not considered)
+# also for pseudotime and the final GRN, only considering HVGs is beneficial so we remove all other right here
+sc.pp.highly_variable_genes(adata)
+adata = adata[:, adata.var['highly_variable']]
 
 # print to console how many cells and genes are left after preprocessing
 print(f"{adata.shape[0]} cells and {adata.shape[1]} genes left after preprocessing the file: {os.path.basename(input_data_path)}")
