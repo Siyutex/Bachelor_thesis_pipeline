@@ -17,26 +17,27 @@ import tarfile
 import pandas as pd
 
 # import command line arguments from ececutor script
-input_data = sys.argv[1] if len(sys.argv) > 1 else print("Preprocessing: Please provide the path to the raw data directory. It must contain mtx and tsv files from the 10x genomics pipeline") # can be a folder or a file, depending on the datatype
-input_data_type = sys.argv[2] if len(sys.argv) > 2 else print("Preprocessing: Please provide the data type. It must be one of the following: MTX_TSVs_in_subfolders, compressed_MTX_TSVs, dot_matrix_files") # string datatype variable to indicate which pipeline mode was chosen in the executor script
-print(input_data_type)
+input_data_path = sys.argv[1] if len(sys.argv) > 1 else print("Please provide the path to the raw data directory. It must contain mtx and tsv files from the 10x genomics pipeline") # can be a folder or a file, depending on the datatype
+output_data_path = sys.argv[2] if len(sys.argv) > 2 else print("Please provide the path to where the output should be saved")
+input_data_type = sys.argv[3] if len(sys.argv) > 3 else print("Please provide the data type. It must be one of the following: MTX_TSVs_in_subfolders, compressed_MTX_TSVs, dot_matrix_files") # string datatype variable to indicate which pipeline mode was chosen in the executor script
 
+print(output_data_path)
 
 if input_data_type == "MTX_TSVs_in_subfolders":
     # read mtx file, and tsv files from the current folder in the raw_data directory
-    adata = sc.read_10x_mtx(input_data)  
+    adata = sc.read_10x_mtx(input_data_path)  
 elif input_data_type == "compressed_MTX_TSVs_in_subfolders":
     # extract compressed files to a temporary directory and read them from there
     with tempfile.TemporaryDirectory() as temp_dir:
-        for file in os.listdir(input_data):
+        for file in os.listdir(input_data_path):
             if file.endswith(".tar.gz") or file.endswith(".tgz"):
-                file_path = os.path.join(input_data, file)
+                file_path = os.path.join(input_data_path, file)
                 with tarfile.open(file_path, "r:gz") as tar:
                     tar.extractall(path=temp_dir)
         adata = sc.read_10x_mtx(temp_dir)
 elif input_data_type == "dot_matrix_files":
     # directly read the forwarded .matrix file = raw_data
-    temp_df = pd.read_csv(input_data, sep="\t", index_col=0) # rows are genes, columns are cells, need to transpose to fit with annData format
+    temp_df = pd.read_csv(input_data_path, sep="\t", index_col=0) # rows are genes, columns are cells, need to transpose to fit with annData format
     adata = sc.AnnData(temp_df.T) # transpose the dataframe to have cells as rows and genes as columns
 
 
@@ -62,16 +63,15 @@ sc.pp.normalize_total(adata, target_sum=1e4)  # normalize each cell to have a to
 sc.pp.log1p(adata)  # log transform the data
 
 # print to console how many cells and genes are left after preprocessing
-print(f"Preprocessing: {adata.shape[0]} cells and {adata.shape[1]} genes left after preprocessing in file: preprocessed_{input_data} \n")
+print(f"{adata.shape[0]} cells and {adata.shape[1]} genes left after preprocessing the file: {os.path.basename(input_data_path)}")
 
 
-# save the processed data to temporary h5ad file
-os.makedirs(os.path.join(tempfile.gettempdir(), "python"), exist_ok=True)
-output_path = os.path.join(tempfile.gettempdir(), "python", f"preprocessed_{os.path.basename(input_data)}.h5ad")
-adata.write(output_path)
-print(f"Preprocessing: Preprocessed data saved to temporary file: {output_path}")
+# save the processed data to temporary h5ad file, make relevant directory first
+os.makedirs(os.path.join(output_data_path, "preprocessing"),exist_ok=True)
+final_output_path = os.path.join(output_data_path, "preprocessing", os.path.basename(input_data_path) + ".h5ad")
+adata.write(final_output_path)
 
 # foward the path to the temporary file to the executor script via stdout
-print("Output: " + output_path)
+print("Output: " + final_output_path)
 
 

@@ -13,19 +13,25 @@ import time
 if not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "..", "Data")):  # check if data directory exists
     os.makedirs(os.path.join(os.path.dirname(__file__), "..", "..", "Data"))  # create data directory if it does not exist
     print("Created Data directory. Please add subdirectories for each sample containing the mtx and tsv outputs of the 10x genomics pipeline")  # inform user to add subdirectories with required files
-if not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "..", "Data", "temp")):  # check if temp directory exists
-    os.makedirs(os.path.join(os.path.dirname(__file__), "..", "..", "Data", "temp"))  # create temp directory if it does not exist
-    print("Created temp directory. Preprocessed files will be saved here.")  # inform user that preprocessed files will be saved here
+if not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "..", "Data", "output_storage")):  # check if storage directory exists
+    os.makedirs(os.path.join(os.path.dirname(__file__), "..", "..", "Data", "output_storage"))  # create storage directory if it does not exist
+    print("Created output_storage directory. Intermediate output files will be saved here, if specified in OUTCOME_STORAGE.")  # inform user that intermediate outputs can be saved here
+if not os.path.exists(os.path.join(tempfile.gettempdir(),"python")):
+    os.makedirs(os.path.join(tempfile.gettempdir(),"python"))
+    print("created \"python\" directory in appdata/local/temp to store temporary pipeline files. These files will be deleted when purgetempfiles() is called.")
+
 
 
 # declare script directory and mtx directory as global constants
 SCRIPT_DIR = os.path.dirname(__file__)  # directory where this script is located
 RAW_DATA_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data","OG_PDAC_and_Pancreas")  # directory where files / folder with files are located (10x genomics, GDC or cancerSCEM format)
-TEMP_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data", "temp")  # directory for temporary files
+OUTPUT_STORAGE_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data", "output_storage")  # directory for optional permanent storage of indermediate subprocess outputs
+TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage of temporary pipeline files
+
 
 # variable to determine what intermediate files should be saved permanently, one key per script
 OUTCOME_STORAGE = {
-    "Preprocessing.py": True,
+    "Preprocessing.py": False,
     "Epithelial_cell_isolation.py": False,
     "Variance.py": False
 }
@@ -81,7 +87,7 @@ def execute_subprocess(subprocess_path: str, inputadata_path: str, inputdatatype
     
     # intialize the subprocess and pass command line arguments (this starts the subprocess, but you can still interact with it (not possible with subprocess.run))
     # subprocess.run and subprocess.Popen take args = [] as first argument, args[0] is the executable (the python itnerpreter), and the rest are arguments to the interpreter (so args[1], in this case is a filepath to a python executable, so it will be executed by the itnerpreter)
-    proc = subprocess.Popen(["python", subprocess_path, inputadata_path, inputdatatype, num_objects], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    proc = subprocess.Popen(["python", subprocess_path, inputadata_path, TEMP_DIR, inputdatatype, num_objects], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
     # forward python objects to subprocess via stdin (need to be read in the subprocess)
     if python_objects is not None:
@@ -93,21 +99,22 @@ def execute_subprocess(subprocess_path: str, inputadata_path: str, inputdatatype
     # send back the path to a temporary file with the output
     # temp files should be tempfile.NamedTemporaryFile(delete=False) so they still exist after the subprocess ends
     for line in proc.stdout:
-        # we expect the paths that are returned from the subprocesses to be structured like "Output: " + [path]
+        # we expect the output paths that are returned from the subprocesses to be structured like "Output: " + [path]
         if line.strip().startswith("Output: "):
             output_path = line.split("Output:")[1]  # read the output from stdout of subprocess (should be a path to a temporary file)
-            print(f"execute_subrpocess: recieved output: {output_path}")
+            print(f"execute_subprocess: received output: {output_path}")
             return output_path.strip()  # return the path to the temporary file with the output
-
+        else:
+            # if there is another print statement in the subprocess, get the output and print it here
+            out = line
+            print(f"Subprocess {os.path.basename(subprocess_path)}: {out}")
 
 def purge_tempfiles():
     # get the system temp directory (e.g. /tmp on Linux, AppData\Local\Temp on Windows)
-    os.makedirs(os.path.join(tempfile.gettempdir(),"python"), exist_ok=True)
-    pipeline_temp_dir = os.path.join(tempfile.gettempdir(),"python")
 
     # careful: this deletes *everything* inside that dir
-    for filename in os.listdir(pipeline_temp_dir):
-        file_path = os.path.join(pipeline_temp_dir, filename)
+    for filename in os.listdir(TEMP_DIR):
+        file_path = os.path.join(TEMP_DIR, filename)
         try:
             if os.path.isfile(file_path) or os.path.islink(file_path):
                 os.unlink(file_path)       # delete file or symlink
@@ -121,26 +128,22 @@ def preprocess_data(pipeline_mode: pipeline_mode):
     Saves preprocessed files to temp/preprocessed if outcome_storage for Preprocessing.py is True."""
 
     # check if temp directory has preprocessed folder, if not create it
-    if not os.path.exists(os.path.join(TEMP_DIR, "preprocessed")) and OUTCOME_STORAGE["Preprocessing.py"] == True:  # check if temp directory has preprocessed folder and outcome storage is True
-        os.makedirs(os.path.join(TEMP_DIR, "preprocessed"))  # create preprocessed folder if it does not exist 
+    if not os.path.exists(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed")) and OUTCOME_STORAGE["Preprocessing.py"] == True:  # check if temp directory has preprocessed folder and outcome storage is True
+        os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))  # create preprocessed folder if it does not exist 
     
     # output path for preprocessed files with a prefix in a subdirectory of TEMP_DIR
     if OUTCOME_STORAGE["Preprocessing.py"] == True:
-        output_path = os.path.join(TEMP_DIR, "preprocessed")
+        output_path = os.path.join(OUTPUT_STORAGE_DIR, "preprocessed")
 
     # assign datatype variable based on chosen pipeline mode
     datatype = pipeline_mode.name
-    print(f"Chosen pipeline mode: {datatype}")
-    print(pipeline_mode.MTX_TSVs_in_subfolders.name)
 
     # run script on RAW_DATA_DIR based on chosen pipeline mode
     if datatype == pipeline_mode.MTX_TSVs_in_subfolders.name:
         
         # iterate over folders in raw data directory containing two tsv files and one mtx file each
         for folder in os.listdir(RAW_DATA_DIR):
-             
             print("Currently preprocessing: " +  folder)
-
             temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(RAW_DATA_DIR, folder), datatype)
             
             # if specified, permanently store a copy of the temporary output file
@@ -148,28 +151,38 @@ def preprocess_data(pipeline_mode: pipeline_mode):
                 shutil.copy(temp_output_path, os.path.join(output_path, f"preprocessed_{folder}.h5ad"))
     
     elif datatype == pipeline_mode.compressed_MTX_TSVs_in_subfolders.name:
+
         # iterate over folder in raw data directory, then forward compressed files in them
         for folder in os.listdir(RAW_DATA_DIR):
             print("Currently preprocessing: " +  folder)
-            subprocess.run(["python", os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(RAW_DATA_DIR, folder), os.path.join(output_path, folder), datatype, OUTCOME_STORAGE], check=True) # check=True ensures that an error in the subprocess will raise an exception
+            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(RAW_DATA_DIR, folder), datatype)
+
+            if OUTCOME_STORAGE["Preprocessing.py"] == True:
+                shutil.copy(temp_output_path, os.path.join(output_path, f"preprocessed_{folder}.h5ad"))
+
     elif datatype == pipeline_mode.dot_matrix_files.name:
+
         # directly forward .matrix files in RAW_DATA_DIR
         for file in os.listdir(RAW_DATA_DIR):
             print("Currently preprocessing: " +  file)
-            subprocess.run(["python", os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(RAW_DATA_DIR, file), os.path.join(output_path, file), datatype, OUTCOME_STORAGE], check=True) # check=True ensures that an error in the subprocess will raise an exception
+            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(RAW_DATA_DIR, file), datatype)
+
+            if OUTCOME_STORAGE["Preprocessing.py"] == True:
+                shutil.copy(temp_output_path, os.path.join(output_path, f"preprocessed_{file}.h5ad"))
+
 
 def isolate_epithelial_cells():
     """Loops through the preprocessed h5ad files in temp/preprocessed and runs Epithelial_cell_isolation.py on each."""
 
     # check if temp directory has epithelial_isolated folder, if not create it
-    if not os.path.exists(os.path.join(TEMP_DIR, "epithelial_isolated")):  # check if temp directory has epithelial_isolated folder
-        os.makedirs(os.path.join(TEMP_DIR, "epithelial_isolated"))  # create epithelial_isolated folder if it does not exist
+    if not os.path.exists(os.path.join(OUTPUT_STORAGE_DIR, "epithelial_isolated")):  # check if temp directory has epithelial_isolated folder
+        os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "epithelial_isolated"))  # create epithelial_isolated folder if it does not exist
 
-    for file in os.listdir(os.path.join(TEMP_DIR, "preprocessed")):  # iterate over files in the temp directory where preprocessed files are stored
+    for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed")):  # iterate over files in the temp directory where preprocessed files are stored
         if file.endswith(".h5ad"): # check if the file is an h5ad file
             (print("Currently isolating epithelial cells from: " + file))
-            file_path = os.path.join(TEMP_DIR, "preprocessed", file)
-            output_path = os.path.join(TEMP_DIR, "epithelial_isolated", f"epithelial_isolated_{file}") # save output in the temp directory with another new prefix
+            file_path = os.path.join(OUTPUT_STORAGE_DIR, "preprocessed", file)
+            output_path = os.path.join(OUTPUT_STORAGE_DIR, "epithelial_isolated", f"epithelial_isolated_{file}") # save output in the temp directory with another new prefix
             subprocess.run(["python", os.path.join(SCRIPT_DIR, "Epithelial_cell_isolation.py"), file_path, output_path], check=True) # check=True ensures that an error in the subprocess will raise an exception
         else:
             print(f"Epithelial_isolation: Skipping file {file} as it is not a .h5ad file.")
@@ -182,11 +195,11 @@ def compute_variance():
     ADJ_paths = []  # list to store paths to tumor adjacent tissue files
     PDAC_paths = []  # list to store paths to tumor tissue files
 
-    for file in os.listdir(os.path.join(TEMP_DIR, "epithelial_isolated")):  # iterate over files in the temp directory where epithelial isolated files are stored
+    for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "epithelial_isolated")):  # iterate over files in the temp directory where epithelial isolated files are stored
         if file.endswith(".h5ad") and "ADJ" in file:  # check if the file is a h5ad file and tumor adjacent tissue
-            ADJ_paths.append(os.path.join(TEMP_DIR, "epithelial_isolated", file))  # add the file path to the list
+            ADJ_paths.append(os.path.join(OUTPUT_STORAGE_DIR, "epithelial_isolated", file))  # add the file path to the list
         elif file.endswith(".h5ad") and "PDAC" in file:  # check if the file is a h5ad file and tumor tissue
-            PDAC_paths.append(os.path.join(TEMP_DIR, "epithelial_isolated", file))
+            PDAC_paths.append(os.path.join(OUTPUT_STORAGE_DIR, "epithelial_isolated", file))
         else:
             print(f"Variance: Skipping file {file} as it is not a .h5ad.gz file.")
 

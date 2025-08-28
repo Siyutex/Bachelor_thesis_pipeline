@@ -5,6 +5,7 @@ General design:
 	  python
 	- use functions
 	- explain everything with comments
+	- try to avoid hardcoded strings as arguments (use variables / constants so it still matches if changed)
 	- pipeline executor files to run pipeline in modules
 	- pipeline executor handles conditionals (eg differing folder structures), then have 
 	  different subprocesses for each condition, no conditionals in subprocesses.
@@ -16,7 +17,7 @@ General design:
 	- data is parsed between executor and subprocesses as either a serialzed JSON object 
 	  or as a filepath to a resulting temporary file in /tmp 
 	- temporary files can be permanently saved to a copy if specified
-	- all termporary files are automatically delete after the pipeline finishes
+	- all termporary files are automatically deleted after the pipeline finishes
 
 
 Error Handling Philosophy for Thesis & Reusable Code
