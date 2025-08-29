@@ -63,10 +63,10 @@ adata = adata[adata.obs['pct_counts_mito'] < 25, :]
 sc.pp.normalize_total(adata, target_sum=1e4)  # normalize each cell to have a total count of 10,000 (eg 1687 UMI counts per cell, actin is 189 UMI counts, so 189/1687 = 0.112, which is 11.2% of the total counts in the cell = 1120 UMI counts per 10,000 UMI counts)
 sc.pp.log1p(adata)  # log transform the data
 
-# isolate highly variable genes (harmony batch correction works in PCA space, meaning non HVGs are not considered)
+'''# isolate highly variable genes (harmony batch correction works in PCA space, meaning non HVGs are not considered)
 # also for pseudotime and the final GRN, only considering HVGs is beneficial so we remove all other right here
 sc.pp.highly_variable_genes(adata)
-adata = adata[:, adata.var['highly_variable']]
+adata = adata[:, adata.var['highly_variable']]'''
 
 # print to console how many cells and genes are left after preprocessing
 print(f"{adata.shape[0]} cells and {adata.shape[1]} genes left after preprocessing the file: {os.path.basename(input_data_path)}")

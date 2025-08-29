@@ -28,7 +28,7 @@ if not os.path.exists(os.path.join(tempfile.gettempdir(),"python")):
 
 # path constants
 SCRIPT_DIR = os.path.dirname(__file__)  # directory where this script is located
-RAW_DATA_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining","cancerSCEM","colon_cancer_cancerous")  # directory where files / folder with files are located (10x genomics, GDC or cancerSCEM format)
+RAW_DATA_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining","cancerSCEM","colon_cancer_non_cancerous")  # directory where files / folder with files are located (10x genomics, GDC or cancerSCEM format)
 OUTPUT_STORAGE_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data", "output_storage")  # directory for optional permanent storage of indermediate subprocess outputs
 TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage of temporary pipeline files
 

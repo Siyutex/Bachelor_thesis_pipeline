@@ -17,49 +17,68 @@ import sys
 import scanpy as sc
 import anndata
 
-def aggregate_batches(directories):
+directories = [r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\colon_cancer_preprocessed",
+               r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\colon_normal_preprocessed"]
+sample_size = 2  # how many files to sample from each directory, to avoid memory issues
+
+def aggregate_batches(directories: list[os.PathLike], sample_size: int = 1):
     """
     Load AnnData files from given directories, treating each file as a batch.
     Returns a merged AnnData object with .obs['batch'] indicating the batch label (filename).
     """
     batches = []
-    labels = []
+    batch_labels = []
+    cancer_states = []
 
+    run = 0
     for d in directories:
-        for fname in os.listdir(d):
-            if fname.endswith(".h5ad"):   # adjust if your files are in another format
+        print(f"Processing directory: {d}")
+        
+
+        current_dir = os.listdir(d)
+        for i, fname in enumerate(current_dir):
+            print(f"Index of current batch: {i}")
+            if fname.endswith(".h5ad") and i+1 <= sample_size:  # adjust if your files are in another format
                 path = os.path.join(d, fname)
                 print(f"Loading {path}")
                 adata = sc.read_h5ad(path)
                 batches.append(adata)
-                labels.append(os.path.splitext(fname)[0])  # filename w/o extension as label
-    
-    # compute intersection of gene names
-    intersect_genes = set(batches[0].var_names)
-    for ad in batches[1:]:
-        intersect_genes &= set(ad.var_names)
-    intersect_genes = sorted(list(intersect_genes))
-    print(f"Keeping {len(intersect_genes)} genes present in all batches.")
+                batch_labels.append(fname.split("_")[1].split(".")[0])  # assuming filenames like ..._[relevant_label]. ...
+                cancer_states.append("cancer" if "cancer" in d else "normal")
+                print(batch_labels[-1])  # filename w/o extension as label
+            elif not fname.endswith(".h5ad"):
+                print(f"Skipping {fname}, not an .h5ad file.")
+                continue
+            elif i+1 >= sample_size:
+                print("Sample size limit reached. Continuing to next directory.")
+                break
+        
+    print("Cancer states of batches:", cancer_states)
 
-    # subset each batch
-    batches = [ad[:, intersect_genes] for ad in batches]
+    # Expand cancer states to match the number of cells in each batch
+    cancer_states_expanded = []
+    for state, ad in zip(cancer_states, batches):
+        cancer_states_expanded.extend([state] * ad.n_obs)
 
     # Merge all batches into one AnnData
     merged = anndata.concat(
         batches,
         join="outer",           # union of genes, fill missing with 0
-        label="batch",          # new column in .obs
-        keys=labels,
+        label="batch",        # name of the new obs column
+        keys=batch_labels,     # values for the new obs column
         fill_value=0,
         index_unique="-"
     )
 
+    # Add cancer state information to .obs
+    merged.obs["cancer_state"] = cancer_states_expanded
+
     return merged
 
 
-def main(directories):
+def main(directories, sample_size):
     # Step 1: load and merge
-    adata = aggregate_batches(directories)
+    adata = aggregate_batches(directories, sample_size)
 
     # Step 2: dimensionality reduction
     sc.pp.scale(adata, max_value=10)
@@ -68,13 +87,9 @@ def main(directories):
     sc.tl.umap(adata)
 
     # Step 3: plot UMAP colored by batch
-    sc.pl.umap(adata, color="batch", title="UMAP colored by batch", legend_loc="on data")
+    sc.pl.umap(adata, color="batch", title="UMAP colored by batch", legend_loc="best")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 1:
-        print("Usage: python batch_umap.py <dir1> <dir2> ...")
-        sys.exit(1)
 
-    dirs = sys.argv[1:]
-    main(dirs)
+    main(directories, sample_size)
