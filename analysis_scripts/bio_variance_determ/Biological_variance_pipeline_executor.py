@@ -7,7 +7,11 @@ from enum import Enum
 import json # needed for forwarding python objects to subprocesses
 import shutil # needed for file storage operations
 import tempfile # needed for temporary file operations
-import time
+import sys # needed to exit the program
+
+from rich.traceback import install # needed for pretty printing of tracebacks
+install(show_locals=True, suppress=[]) # install rich traceback handler
+
 
 #check if the required directories exist, if not create them
 if not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "..", "Data")):  # check if data directory exists
@@ -22,7 +26,7 @@ if not os.path.exists(os.path.join(tempfile.gettempdir(),"python")):
 
 
 
-# declare script directory and mtx directory as global constants
+# path constants
 SCRIPT_DIR = os.path.dirname(__file__)  # directory where this script is located
 RAW_DATA_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining","cancerSCEM","colon_cancer_cancerous")  # directory where files / folder with files are located (10x genomics, GDC or cancerSCEM format)
 OUTPUT_STORAGE_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data", "output_storage")  # directory for optional permanent storage of indermediate subprocess outputs
@@ -42,6 +46,9 @@ class pipeline_mode(Enum):
     compressed_MTX_TSVs_in_subfolders = 2 #GDC format
     dot_matrix_files = 3 #cancerSCEM format
     NO_MODE_CHOSEN = None
+
+# global variables
+stop_requested = False  # flag to indicate if a stop has been requested
 
 # functions
 def choose_pipeline_mode():
@@ -109,7 +116,7 @@ def execute_subprocess(subprocess_path: str, inputadata_path: str, inputdatatype
             print(f"Subprocess {os.path.basename(subprocess_path)}: {out}")
 
 
-def purge_tempfiles():
+def purge_tempfiles(a=None, b=None): # a and b are needed for signal handler, but not used
     # get the system temp directory (e.g. /tmp on Linux, AppData\Local\Temp on Windows)
 
     # careful: this deletes *everything* inside that dir
@@ -122,6 +129,13 @@ def purge_tempfiles():
                 shutil.rmtree(file_path)   # delete folder and contents
         except Exception as e:
             print(f"Failed to delete {file_path}: {e}")
+
+        
+def request_stop(signum, frame):
+    # signal handler to request stopping the main loop
+    print(f"Caught signal {signum}, will stop soon pipeline execution...")
+    global stop_requested
+    stop_requested = True
 
 
 def preprocess_data(pipeline_mode: pipeline_mode):
@@ -213,6 +227,30 @@ def compute_variance():
 # main loop
 
 if __name__ == "__main__": # ensures this code runs only when this script is executed directly, not when imported
-    mode = choose_pipeline_mode()
-    preprocess_data(mode)
-    purge_tempfiles()
+    
+    # --- register signal handlers ---
+    import signal
+    signal.signal(signal.SIGINT, request_stop)   # Ctrl+C
+    signal.signal(signal.SIGTERM, request_stop)  # kill (default TERM)
+    try:
+        signal.signal(signal.SIGHUP, request_stop)   # terminal close (Linux/macOS)
+    except AttributeError:
+        pass  # SIGHUP not available on Windows
+
+    # --- main loop ---
+    while not stop_requested:
+        try:
+            mode = choose_pipeline_mode()
+            preprocess_data(mode)
+            purge_tempfiles()
+            print("Temporary files purged.")
+            sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
+        except Exception:
+            purge_tempfiles()
+            print("Temporary files purged.")
+            raise # re-raise the exception to see the traceback and error message
+    
+    print("How did we get here? Don't know, but the temp files should be purged now.")
+
+
+
