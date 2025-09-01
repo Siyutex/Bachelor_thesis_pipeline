@@ -29,3 +29,9 @@ Error Handling Philosophy for Thesis & Reusable Code
     ✅ Prioritize code I can reliably re-run months later without debugging (this is why comments and error handling are important)
 
     ✅ Keep GitHub repos clean and understandable to show competence, but avoid over-engineering
+
+
+For future projects:
+- at the very beginning, run a script to standardize raw data format
+	(eg takes a directory with any format, saves all files a h5ad to another directory and gives them
+	 distincitve names eg standardized_GDC_glioma_cancerous_1.h5ad)

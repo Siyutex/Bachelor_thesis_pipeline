@@ -28,7 +28,11 @@ if not os.path.exists(os.path.join(tempfile.gettempdir(),"python")):
 
 # path constants
 SCRIPT_DIR = os.path.dirname(__file__)  # directory where this script is located
-RAW_DATA_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining","cancerSCEM","colon_cancer_non_cancerous")  # directory where files / folder with files are located (10x genomics, GDC or cancerSCEM format)
+# list of directories (see choose_pipeline_mode for valid structures for each entry)
+RAW_DATA_DIRS = [
+                os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining","GDC","glioma_cancerous"),
+                os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining","cancerSCEM","breast_cancer_non_cancerous")
+                ]
 OUTPUT_STORAGE_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data", "output_storage")  # directory for optional permanent storage of indermediate subprocess outputs
 TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage of temporary pipeline files
 
@@ -47,27 +51,24 @@ class pipeline_mode(Enum):
     dot_matrix_files = 3 #cancerSCEM format
     NO_MODE_CHOSEN = None
 
-# global variables
-stop_requested = False  # flag to indicate if a stop has been requested
-
 # functions
-def choose_pipeline_mode():
+def choose_pipeline_mode(raw_data_dir):
     """Inspects the structure of the provided RAW_DATA_DIR and returns the appropraote
     pipeline_mode enum value."""
     
     mode = pipeline_mode.NO_MODE_CHOSEN
 
     # check if RAW_DATA_DIR has subdirectories (to avoid errors), if so check their structure
-    if any(os.path.isdir(os.path.join(RAW_DATA_DIR, folder)) for folder in os.listdir(RAW_DATA_DIR)):
+    if any(os.path.isdir(os.path.join(raw_data_dir, folder)) for folder in os.listdir(raw_data_dir)):
 
-        if any(any(file.endswith(".mtx") for file in os.listdir(os.path.join(RAW_DATA_DIR,folder))) for folder in os.listdir(RAW_DATA_DIR)):
+        if any(any(file.endswith(".mtx") for file in os.listdir(os.path.join(raw_data_dir,folder))) for folder in os.listdir(raw_data_dir)):
             # if there is an mtx in any subfolder of RAW_DATA_DIR, we assume that it is full of folders with mtx + 2 tsvs (10x genomics format)
             mode = pipeline_mode.MTX_TSVs_in_subfolders
 
-        if any(any(file.endswith("matrix.tar.gz") for file in os.listdir(os.path.join(RAW_DATA_DIR,folder))) for folder in os.listdir(RAW_DATA_DIR)):
+        if any(any(file.endswith("matrix.tar.gz") for file in os.listdir(os.path.join(raw_data_dir,folder))) for folder in os.listdir(raw_data_dir)):
             # if there is such a structure, but with .gz compression (GDC format)
             mode = pipeline_mode.compressed_MTX_TSVs_in_subfolders
-    elif any(file.endswith("counts.matrix.tsv.gz") for file in os.listdir(RAW_DATA_DIR)):
+    elif any(file.endswith("counts.matrix.tsv.gz") for file in os.listdir(raw_data_dir)):
         # if the RAW_DATA_DIR directly contains .matrix files (cancerSCEM format)
         mode = pipeline_mode.dot_matrix_files
 
@@ -81,45 +82,58 @@ def choose_pipeline_mode():
 
 
 # temporary comment: arguments will be: subprocess path, rawdata path, output path (not needed, bcs output is handled in executor), datatype, list of python objects to be forwarded, outcome storage dictionary (not needed, bcs handled per function that runs a subprocess)
-def execute_subprocess(subprocess_path: str, inputadata_path: str, inputdatatype: str=None, python_objects: list = None):
-    """Runs a python subprocess, forwards python objects to it, returns a path to a temporary file with the output,
-    optionally saves output to file. Only subprocess_path and inputadata_path are required arguments. 
-    Inputadatatype is only needed for Preprocessing.py."""
+import subprocess
+import json
+import os
 
-    if python_objects is not None:
-        num_objects = str(len(python_objects))  # number of python objects to be forwarded, needed in subprocess to know how many to expect
-    else:
-        num_objects = "0"  # if no python objects are to be forwarded, set to 0 (needs to be a string to be passed as command line argument)
-    
-    # intialize the subprocess and pass command line arguments (this starts the subprocess, but you can still interact with it (not possible with subprocess.run))
-    # subprocess.run and subprocess.Popen take args = [] as first argument, args[0] is the executable (the python itnerpreter), and the rest are arguments to the interpreter (so args[1], in this case is a filepath to a python executable, so it will be executed by the itnerpreter)
-    proc = subprocess.Popen(["python", subprocess_path, inputadata_path, TEMP_DIR, inputdatatype, num_objects], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+def execute_subprocess(subprocess_path: str, inputadata_path: str, output_dir_path: str,
+                       inputdatatype: str = None, python_objects: list = None) -> str:
+    """Run a Python subprocess, forward arguments and optional JSON objects, return output file path."""
 
-    # forward python objects to subprocess via stdin (need to be read in the subprocess)
-    if python_objects is not None:
-        for python_object in python_objects:
-            json_string = json.dumps(python_object)  # convert python object to json string
-            proc.stdin.write(json_string + "\n")  # write json string to stdin of subprocess, followed by newline
-            proc.stdin.flush()  # flush the stdin buffer to ensure the data is sent
+    args = ["python", subprocess_path, inputadata_path, output_dir_path, inputdatatype or "", str(len(python_objects or []))]
 
-    # send back the path to a temporary file with the output
-    # temp files should be tempfile.NamedTemporaryFile(delete=False) so they still exist after the subprocess ends
-    for line in proc.stdout:
-        # we expect the output paths that are returned from the subprocesses to be structured like "Output: " + [path]
+    # Prepare stdin payload if needed
+    stdin_data = None
+    if python_objects:
+        stdin_data = "\n".join(json.dumps(obj) for obj in python_objects) + "\n"
+
+    # Run subprocess, capture stdout + stderr
+    proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    stdout, stderr = proc.communicate(stdin_data)
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"Subprocess {subprocess_path} failed with exit code {proc.returncode}:\n{stderr}")
+
+    # Parse stdout
+    output_file_path = None
+    for line in stdout.splitlines():
         if line.strip().startswith("Output: "):
-            output_path = line.split("Output:")[1]  # read the output from stdout of subprocess (should be a path to a temporary file)
-            print(f"execute_subprocess: received output: {output_path}")
-            return output_path.strip()  # return the path to the temporary file with the output
+            output_file_path = line.split("Output:", 1)[1].strip()
+            print(f"execute_subprocess: received output: {output_file_path}")
         else:
-            # if there is another print statement in the subprocess, get the output and print it here
-            out = line
-            print(f"Subprocess {os.path.basename(subprocess_path)}: {out}")
+            print(f"Subprocess {os.path.basename(subprocess_path)}: {line}")
+
+    if not output_file_path:
+        raise RuntimeError(f"Subprocess {subprocess_path} finished but did not return an output path.\nStdout:\n{stdout}")
+
+    return output_file_path
+
+
 
 
 def purge_tempfiles(a=None, b=None): # a and b are needed for signal handler, but not used
-    # get the system temp directory (e.g. /tmp on Linux, AppData\Local\Temp on Windows)
+    """
+    Deletes all files and folders in the system temp directory, which is defined by
+    the TEMP_DIR variable. This function is intended to be used as a signal handler
+    to clean up temporary files when the program is interrupted.
 
-    # careful: this deletes *everything* inside that dir
+    Parameters:
+    a (None): not used
+    b (None): not used
+    
+    Returns:
+    None
+    """
     for filename in os.listdir(TEMP_DIR):
         file_path = os.path.join(TEMP_DIR, filename)
         try:
@@ -132,58 +146,98 @@ def purge_tempfiles(a=None, b=None): # a and b are needed for signal handler, bu
 
         
 def request_stop(signum, frame):
-    # signal handler to request stopping the main loop
+    """
+    Signal handler to request stopping the main loop. Also purges tempfiles.
+
+    Parameters:
+    signum (int): signal number
+    frame (frame): current stack frame
+
+    Returns:
+    None
+    """
+    
     print(f"Caught signal {signum}, will stop soon pipeline execution...")
-    global stop_requested
-    stop_requested = True
+    purge_tempfiles()
+    print("Temporary files purged.")
+    sys.exit(0)
 
 
-def preprocess_data(pipeline_mode: pipeline_mode):
+
+def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
     """Loops through the RAW_DATA_DIR and runs Preprocessing.py on each file / folder based on the chosen pipeline mode.
     Saves preprocessed files to temp/preprocessed if outcome_storage for Preprocessing.py is True."""
 
-    # check if temp directory has preprocessed folder, if not create it
+    # check if outcome storage directory has preprocessed folder, if not create it
     if not os.path.exists(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed")) and OUTCOME_STORAGE["Preprocessing.py"] == True:  # check if temp directory has preprocessed folder and outcome storage is True
         os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))  # create preprocessed folder if it does not exist 
     
-    # output path for preprocessed files with a prefix in a subdirectory of TEMP_DIR
+    # output path for preprocessed files with a prefix in a subdirectory of OUTCOME_STORAGE_DIR
     if OUTCOME_STORAGE["Preprocessing.py"] == True:
-        output_path = os.path.join(OUTPUT_STORAGE_DIR, "preprocessed")
+        output_storage_path = os.path.join(OUTPUT_STORAGE_DIR, "preprocessed")
+
+    # check if preprocessed folder exists in TEMP_DIR, if not create it
+    os.makedirs(os.path.join(TEMP_DIR, "preprocessed"), exist_ok=True)
+
+    # assign output path variable to be equal to TEMP_DIR/preprocessed
+    output_path = os.path.join(TEMP_DIR, "preprocessed")
 
     # assign datatype variable based on chosen pipeline mode
     datatype = pipeline_mode.name
 
     # run script on RAW_DATA_DIR based on chosen pipeline mode
+    # define iterator for file naming + 1 for each file in element in raw_data_dir
+    i = 0
     if datatype == pipeline_mode.MTX_TSVs_in_subfolders.name:
         
         # iterate over folders in raw data directory containing two tsv files and one mtx file each
-        for folder in os.listdir(RAW_DATA_DIR):
+        for folder in os.listdir(raw_data_dir):
             print("Currently preprocessing: " +  folder)
-            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(RAW_DATA_DIR, folder), datatype)
+            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_path, datatype)
             
+            # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
+            os.rename(temp_output_path, os.path.join(output_path, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
+            temp_output_path = os.path.join(output_path, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad")
+
             # if specified, permanently store a copy of the temporary output file
             if OUTCOME_STORAGE["Preprocessing.py"] == True:
-                shutil.copy(temp_output_path, os.path.join(output_path, f"preprocessed_{folder}.h5ad"))
-    
+                shutil.copy(temp_output_path, os.path.join(output_storage_path, os.path.basename(temp_output_path)))
+
+            i += 1
+
     elif datatype == pipeline_mode.compressed_MTX_TSVs_in_subfolders.name:
 
         # iterate over folder in raw data directory, then forward compressed files in them
-        for folder in os.listdir(RAW_DATA_DIR):
+        for folder in os.listdir(raw_data_dir):
             print("Currently preprocessing: " +  folder)
-            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(RAW_DATA_DIR, folder), datatype)
+            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_path, datatype)
 
+            # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
+            os.rename(temp_output_path, os.path.join(output_path, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
+            temp_output_path = os.path.join(output_path, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad")
+
+            # if specified, permanently store a copy of the temporary output file
             if OUTCOME_STORAGE["Preprocessing.py"] == True:
-                shutil.copy(temp_output_path, os.path.join(output_path, f"preprocessed_{folder}.h5ad"))
+                shutil.copy(temp_output_path, os.path.join(output_storage_path, os.path.basename(temp_output_path)))
+
+            i += 1
 
     elif datatype == pipeline_mode.dot_matrix_files.name:
 
         # directly forward .matrix files in RAW_DATA_DIR
-        for file in os.listdir(RAW_DATA_DIR):
+        for file in os.listdir(raw_data_dir):
             print("Currently preprocessing: " +  file)
-            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(RAW_DATA_DIR, file), datatype)
+            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, file), output_path, datatype)
 
+            # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
+            os.rename(temp_output_path, os.path.join(output_path, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
+            temp_output_path = os.path.join(output_path, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad")
+
+            # if specified, permanently store a copy of the temporary output file
             if OUTCOME_STORAGE["Preprocessing.py"] == True:
-                shutil.copy(temp_output_path, os.path.join(output_path, f"preprocessed_{file}.h5ad"))
+                shutil.copy(temp_output_path, os.path.join(output_storage_path, os.path.basename(temp_output_path)))
+
+            i += 1
 
 
 def isolate_epithelial_cells():
@@ -238,19 +292,18 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         pass  # SIGHUP not available on Windows
 
     # --- main loop ---
-    while not stop_requested:
-        try:
-            mode = choose_pipeline_mode()
-            preprocess_data(mode)
-            purge_tempfiles()
-            print("Temporary files purged.")
-            sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
-        except Exception:
-            purge_tempfiles()
-            print("Temporary files purged.")
-            raise # re-raise the exception to see the traceback and error message
+
+    try:
+        for raw_data_dir in RAW_DATA_DIRS:
+            mode = choose_pipeline_mode(raw_data_dir)
+            preprocess_data(mode, raw_data_dir)
+        purge_tempfiles()
+        sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
+    except Exception:
+        purge_tempfiles()
+        raise # re-raise the exception to see the traceback and error message
     
-    print("How did we get here? Don't know, but the temp files should be purged now.")
+
 
 
 
