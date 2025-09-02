@@ -1,12 +1,12 @@
 # removes:
 """
 Cells with less than 500 genes expressed
-Genes expressed in less than 10 cells
+Genes expressed in less than 1% of cells
 Cells with less than 1000 UMI counts
-Cells with high mitochondrial gene expression (>25%)
-Genes not calssified as "highly variable" 
+Cells with high mitochondrial gene expression (>25%) 
 """
-# and log normalizes the data (per 10K counts, log1p)
+# log normalization and HVG selection should be done lazily when needed in other scripts
+# (scVI needs raw counts, so normalization here would brick that model)
 
 # the mtx files from NCBI GEO are minimally processed (10x genomics), they contain UMI counts for all cells, including those that are not epithelial cells, and those that are not of high quality. This script removes those cells and RNAs that are not of interest.
 # preprocessing similar to paper where data was generated, see https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE212966#:~:text=Summary%20Pancreatic%20ductal%20adenocarcinoma%20,plot%20to%20predict%20the%20overall
@@ -61,9 +61,9 @@ sc.pp.calculate_qc_metrics(adata, qc_vars=["mito"], percent_top=None, log1p=Fals
 # Filter cells with mitochondrial fraction < 25%
 adata = adata[adata.obs['pct_counts_mito'] < 25, :]
 
-# log normalize data
+"""# log normalize data
 sc.pp.normalize_total(adata, target_sum=1e4)  # normalize each cell to have a total count of 10,000 (eg 1687 UMI counts per cell, actin is 189 UMI counts, so 189/1687 = 0.112, which is 11.2% of the total counts in the cell = 1120 UMI counts per 10,000 UMI counts)
-sc.pp.log1p(adata)  # log transform the data
+sc.pp.log1p(adata)  # log transform the data"""
 
 '''# isolate highly variable genes (harmony batch correction works in PCA space, meaning non HVGs are not considered)
 # also for pseudotime and the final GRN, only considering HVGs is beneficial so we remove all other right here

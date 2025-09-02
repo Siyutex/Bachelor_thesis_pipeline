@@ -30,8 +30,8 @@ if not os.path.exists(os.path.join(tempfile.gettempdir(),"python")):
 SCRIPT_DIR = os.path.dirname(__file__)  # directory where this script is located
 # list of directories (see choose_pipeline_mode for valid structures for each entry)
 RAW_DATA_DIRS = [
-                os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining","GDC","glioma_cancerous"),
-                os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining","cancerSCEM","breast_cancer_non_cancerous")
+                os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining","cancerSCEM","clear_cell_renal_carcinoma_cancerous"),
+                os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining","cancerSCEM","clear_cell_renal_carcinoma_non_cancerous"),
                 ]
 OUTPUT_STORAGE_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data", "output_storage")  # directory for optional permanent storage of indermediate subprocess outputs
 TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage of temporary pipeline files
@@ -40,6 +40,7 @@ TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage 
 # variable to determine what intermediate files should be saved permanently, one key per script
 OUTCOME_STORAGE = {
     "Preprocessing.py": True,
+    "Batch_correction.py": True,
     "Epithelial_cell_isolation.py": False,
     "Variance.py": False
 }
@@ -100,6 +101,9 @@ def execute_subprocess(subprocess_path: str, inputadata_path: str, output_dir_pa
     # Run subprocess, capture stdout + stderr
     proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     stdout, stderr = proc.communicate(stdin_data)
+
+    if stdout != "":
+        print(f"Subprocess {os.path.basename(subprocess_path)} recived stdout:\n{stdout}")
 
     if proc.returncode != 0:
         raise RuntimeError(f"Subprocess {subprocess_path} failed with exit code {proc.returncode}:\n{stderr}")
@@ -240,6 +244,25 @@ def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
             i += 1
 
 
+def correct_batch_effects(input_data_dir: str):
+    """Run Batch_correction.py on a given directory of preprocessed h5ad files."""
+
+    #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected"), exist_ok=True)
+    os.makedirs(os.path.join(TEMP_DIR, "batch_corrected"), exist_ok=True)
+
+    # assign directories for temporary and permanent storage
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected")
+    output_temp_dir = os.path.join(TEMP_DIR, "batch_corrected")
+
+    # run script and assign path to temporary output file
+    print(f"Correcting batch effects in {input_data_dir}")
+    temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Batch_correction.py"), input_data_dir, output_temp_dir)
+
+    # if specified, permanently store a copy of the temporary output file
+    if OUTCOME_STORAGE["Batch_correction.py"] == True:
+        shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
+
 def isolate_epithelial_cells():
     """Loops through the preprocessed h5ad files in temp/preprocessed and runs Epithelial_cell_isolation.py on each."""
 
@@ -294,9 +317,10 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
     # --- main loop ---
 
     try:
-        for raw_data_dir in RAW_DATA_DIRS:
+        """for raw_data_dir in RAW_DATA_DIRS:
             mode = choose_pipeline_mode(raw_data_dir)
-            preprocess_data(mode, raw_data_dir)
+            preprocess_data(mode, raw_data_dir)"""
+        correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
     except Exception:
