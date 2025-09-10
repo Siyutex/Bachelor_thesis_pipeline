@@ -22,7 +22,6 @@ import scipy
 import numpy as np
 
 
-
 # import command line arguments from ececutor script
 input_data_path = sys.argv[1] if len(sys.argv) > 1 else print("Please provide the path to the raw data directory. It must contain mtx and tsv files from the 10x genomics pipeline") # can be a folder or a file, depending on the datatype
 output_data_path = sys.argv[2] if len(sys.argv) > 2 else print("Please provide the path to where the output should be saved")
@@ -30,6 +29,7 @@ input_data_type = sys.argv[3] if len(sys.argv) > 3 else print("Please provide th
 
 
 # read data into adata, depending on input data type
+print("Reading data")
 if input_data_type == "MTX_TSVs_in_subfolders":
     # read mtx file, and tsv files from the current folder in the raw_data directory
     adata = sc.read_10x_mtx(input_data_path)  
@@ -48,14 +48,18 @@ elif input_data_type == "dot_matrix_files":
     adata = sc.AnnData(temp_df.T) # transpose the dataframe to have cells as rows and genes as columns
 
 
+
+print("filtering data")
 # filtering
 sc.pp.filter_cells(adata, min_genes=500)  # filter cells with less than 500 genes expressed
 sc.pp.filter_genes(adata, min_cells=int(0.01*adata.n_obs))  # filter genes expressed in less than 1% of cells
 
+print("removing low UMI count cells")
 # remove cells with less than 1000 UMI counts
 adata.obs['n_counts'] = adata.X.sum(axis=1)  # convert sparse matrix to dense array and sum counts per cell (axis=1 means it looks through all columns(genes) per row(cell))
 adata = adata[adata.obs['n_counts'] > 1000, :]  # keep cells with more than 1000 UMI counts
 
+print("removing cells with high mitochondrial gene expression")
 # remove cells with high mitochondrial gene expression (>25%)
 adata.var["mito"] = adata.var_names.str.startswith("MT-")  # identify mitochondrial genes, assuming they start with "MT-"
 sc.pp.calculate_qc_metrics(adata, qc_vars=["mito"], percent_top=None, log1p=False, inplace=True)

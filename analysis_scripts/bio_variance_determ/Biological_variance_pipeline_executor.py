@@ -91,7 +91,7 @@ def execute_subprocess(subprocess_path: str, inputadata_path: str, output_dir_pa
                        inputdatatype: str = None, python_objects: list = None) -> str:
     """Run a Python subprocess, forward arguments and optional JSON objects, return output file path."""
 
-    args = ["python", subprocess_path, inputadata_path, output_dir_path, inputdatatype or "", str(len(python_objects or []))]
+    args = ["python", "-u", subprocess_path, inputadata_path, output_dir_path, inputdatatype or "", str(len(python_objects or []))] # u means unbuffered mode -> directly print when print statement
 
     # Prepare stdin payload if needed
     stdin_data = None
@@ -100,25 +100,26 @@ def execute_subprocess(subprocess_path: str, inputadata_path: str, output_dir_pa
 
     # Run subprocess, capture stdout + stderr
     proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    stdout, stderr = proc.communicate(stdin_data)
 
-    if stdout != "":
-        print(f"Subprocess {os.path.basename(subprocess_path)} recived stdout:\n{stdout}")
-
-    if proc.returncode != 0:
-        raise RuntimeError(f"Subprocess {subprocess_path} failed with exit code {proc.returncode}:\n{stderr}")
-
-    # Parse stdout
+    # Parse every line of stdout
     output_file_path = None
-    for line in stdout.splitlines():
+    for line in proc.stdout:
         if line.strip().startswith("Output: "):
             output_file_path = line.split("Output:", 1)[1].strip()
             print(f"execute_subprocess: received output: {output_file_path}")
         else:
             print(f"Subprocess {os.path.basename(subprocess_path)}: {line}")
 
-    if not output_file_path:
-        raise RuntimeError(f"Subprocess {subprocess_path} finished but did not return an output path.\nStdout:\n{stdout}")
+    # Wait for subprocess to finish and collect stderr
+    stdout, stderr = proc.communicate(input=stdin_data)
+
+    # if there was an error, raise RntimeError and print stderr
+    if proc.returncode != 0:
+        raise RuntimeError(f"Subprocess {os.path.basename(subprocess_path)} failed with exit code {proc.returncode}:\n{stderr}")
+
+    # if output file path was not printed to stdout by the subprocess, raise RuntimeError
+    if output_file_path is None:
+        raise RuntimeError(f"Output file path not found in subprocess {os.path.basename(subprocess_path)} stdout")
 
     return output_file_path
 
