@@ -16,8 +16,9 @@ import os
 import sys
 import scanpy as sc
 import anndata
+import matplotlib.pyplot as plt
 
-directories = [r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\preprocessed"]
+directories = [r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\batch_correction_validation"]
 sample_size = 2  # how many files to sample from each directory, to avoid memory issues
 
 def aggregate_batches(directories: list[os.PathLike], sample_size: int = 1):
@@ -42,8 +43,8 @@ def aggregate_batches(directories: list[os.PathLike], sample_size: int = 1):
                 print(f"Loading {path}")
                 adata = sc.read_h5ad(path)
                 batches.append(adata)
-                batch_labels.append(fname.split("_")[1].split(".")[0])  # assuming filenames like ..._[relevant_label]. ...
-                cancer_states.append("cancer" if "cancer" in d else "normal")
+                batch_labels.append(fname.removeprefix("preprocessed_").removesuffix(".h5ad"))  # assuming filenames like preprocessed_[relevant].h5ad
+                cancer_states.append("non_cancerous" if "non_cancerous" in fname else "cancerous")
                 print(batch_labels[-1])  # filename w/o extension as label
             elif not fname.endswith(".h5ad"):
                 print(f"Skipping {fname}, not an .h5ad file.")
@@ -75,6 +76,27 @@ def aggregate_batches(directories: list[os.PathLike], sample_size: int = 1):
     return merged
 
 
+def plot_with_external_legend(adata, **kwargs):
+    # Prevent Scanpy from immediately showing the plot
+    sc.pl.umap(adata, show=False, **kwargs)
+    
+    ax = plt.gca()
+    fig = plt.gcf()
+    
+    # Move legend outside and shrink font
+    ax.legend(
+        bbox_to_anchor=(1.05, 1),  # move right of plot
+        loc='upper left',
+        fontsize='small',
+        title=kwargs.get('color', '')  # use color key as legend title
+    )
+    
+    # Adjust layout to avoid clipping
+    plt.tight_layout()
+    plt.show()
+
+
+
 def main(directories, sample_size):
     # Step 1: load and merge
     adata = aggregate_batches(directories, sample_size)
@@ -86,7 +108,7 @@ def main(directories, sample_size):
     sc.tl.umap(adata)
 
     # Step 3: plot UMAP colored by batch
-    sc.pl.umap(adata, color="batch", title="UMAP colored by batch", legend_loc="best")
+    plot_with_external_legend(adata, color="batch", title="UMAP colored by batch")
 
 
 if __name__ == "__main__":

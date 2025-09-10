@@ -318,9 +318,9 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
     # --- main loop ---
 
     try:
-        for raw_data_dir in RAW_DATA_DIRS:
+        '''for raw_data_dir in RAW_DATA_DIRS:
             mode = choose_pipeline_mode(raw_data_dir)
-            preprocess_data(mode, raw_data_dir)
+            preprocess_data(mode, raw_data_dir)'''
         correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
