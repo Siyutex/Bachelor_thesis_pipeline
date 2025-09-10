@@ -7,6 +7,7 @@ Cells with high mitochondrial gene expression (>25%)
 """
 # log normalization and HVG selection should be done lazily when needed in other scripts
 # (scVI needs raw counts, so normalization here would brick that model)
+# so the output is raw, filtered counts
 
 # the mtx files from NCBI GEO are minimally processed (10x genomics), they contain UMI counts for all cells, including those that are not epithelial cells, and those that are not of high quality. This script removes those cells and RNAs that are not of interest.
 # preprocessing similar to paper where data was generated, see https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE212966#:~:text=Summary%20Pancreatic%20ductal%20adenocarcinoma%20,plot%20to%20predict%20the%20overall
@@ -15,11 +16,12 @@ import scanpy as sc
 import sys
 import os
 import tempfile
-import tarfile
+import tarfile # needed to extract compressed tar files
 import pandas as pd
+import scipy
+import numpy as np
 
 
-# this will raise an error for debugging
 
 # import command line arguments from ececutor script
 input_data_path = sys.argv[1] if len(sys.argv) > 1 else print("Please provide the path to the raw data directory. It must contain mtx and tsv files from the 10x genomics pipeline") # can be a folder or a file, depending on the datatype
@@ -27,6 +29,7 @@ output_data_path = sys.argv[2] if len(sys.argv) > 2 else print("Please provide t
 input_data_type = sys.argv[3] if len(sys.argv) > 3 else print("Please provide the data type. It must be one of the following: MTX_TSVs_in_subfolders, compressed_MTX_TSVs, dot_matrix_files") # string datatype variable to indicate which pipeline mode was chosen in the executor script
 
 
+# read data into adata, depending on input data type
 if input_data_type == "MTX_TSVs_in_subfolders":
     # read mtx file, and tsv files from the current folder in the raw_data directory
     adata = sc.read_10x_mtx(input_data_path)  
@@ -45,8 +48,7 @@ elif input_data_type == "dot_matrix_files":
     adata = sc.AnnData(temp_df.T) # transpose the dataframe to have cells as rows and genes as columns
 
 
-# preprocessing
-
+# filtering
 sc.pp.filter_cells(adata, min_genes=500)  # filter cells with less than 500 genes expressed
 sc.pp.filter_genes(adata, min_cells=int(0.01*adata.n_obs))  # filter genes expressed in less than 1% of cells
 

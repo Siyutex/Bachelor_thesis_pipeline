@@ -12,6 +12,7 @@ import scvi # needed for batch correction
 import re # needed to clean up file names
 from pympler import asizeof # needed for memory profiling
 
+print("batch correction script initiated")
 # import command line arguments from ececutor script
 input_data_dir = sys.argv[1] if len(sys.argv) > 1 else print("Please provide the path to the input directory")
 output_data_dir = sys.argv[2] if len(sys.argv) > 2 else print("Please provide the path to the output directory")
@@ -154,7 +155,7 @@ def correct_batches(adata, max_considered_genes: int = None):
 
     # only consider HVGs present in at least 30% of batches (and at very least 2 batches)
     threshold = max(2, int(0.3 * B))
-    mask = adata.var.get('highly_variable_nbatches', 0) >= threshold
+    mask = adata.var.get('highly_variable_nbatches' / adata.obs['batch'].nunique) >= threshold
     adata_hvg = adata[:, mask].copy()
 
     # set up model with batch information
@@ -165,7 +166,7 @@ def correct_batches(adata, max_considered_genes: int = None):
     model.train()
 
     # Get the batch-corrected latent representation
-    adata_hvg.obsm["X_scVI"] = model.get_latents()
+    adata_hvg.obsm["X_scVI_latent"] = model.get_latent_representation()
 
     return adata_hvg
 
@@ -195,7 +196,7 @@ def plot_corrected_umap(adata):
     sc.tl.leiden(adata)
 
     # Plot to check batch correction
-    sc.pl.umap(adata, color="cacner_state", legend_loc="best")
+    sc.pl.umap(adata, color="batch", legend_loc="best")
 
 
 
@@ -203,24 +204,14 @@ def plot_corrected_umap(adata):
 # execute script
 cancertypes = get_cancer_types(input_data_dir)
 for cancertype in cancertypes:
-    adata = aggregate_batches(cancertype, max_obs_cancerous=20000, max_obs_non_cancerous=20000)
+    adata = aggregate_batches(cancertype, max_obs_cancerous=10000, max_obs_non_cancerous=10000)
     print(f"adata size in GB: {asizeof.asizeof(adata) / 1024**3}") # size of adata in GB
 
-    adata = correct_batches(adata) 
-    plot_corrected_umap(adata)
+    adata_hvg = correct_batches(adata) 
+    plot_corrected_umap(adata_hvg)
 
 
     # save the processed data to temporary h5ad file, make relevant directory first
     final_output_path = os.path.join(output_data_dir,f"batch_corrected_{cancertype}.h5ad")
     adata.write(final_output_path)
     print("Output: " + final_output_path)
-
-
-"""# Step 2: dimensionality reduction
-sc.pp.scale(adata, max_value=10)
-sc.tl.pca(adata, svd_solver="arpack")
-sc.pp.neighbors(adata, n_neighbors=10, n_pcs=40)
-sc.tl.umap(adata)
-
-# Step 3: plot UMAP colored by batch
-sc.pl.umap(adata, color="cancer_state", legend_loc="best")"""

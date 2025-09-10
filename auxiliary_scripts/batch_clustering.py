@@ -17,8 +17,7 @@ import sys
 import scanpy as sc
 import anndata
 
-directories = [r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\colon_cancer_preprocessed",
-               r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\colon_normal_preprocessed"]
+directories = [r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\preprocessed"]
 sample_size = 2  # how many files to sample from each directory, to avoid memory issues
 
 def aggregate_batches(directories: list[os.PathLike], sample_size: int = 1):
