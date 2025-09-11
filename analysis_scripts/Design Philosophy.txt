@@ -7,10 +7,11 @@ General design:
 	- explain everything with comments
 	- try to avoid hardcoded strings as arguments (use variables / constants so it still matches if changed)
 	- pipeline executor files to run pipeline in modules
-	- pipeline executor handles conditionals (eg differing folder structures), then have 
+	- pipeline executor handles conditionals and looping (eg differing folder structures), then have 
 	  different subprocesses for each condition, no conditionals in subprocesses.
 	  The pipeline executor is the master brain, the subprocesses are just workers
 	  --> easier bugfixing
+	- subprocesses run on minimal dataset (eg one file or one tissue type, looping in executor)
 	- BUT: subprocesses should be able to handle different file types (for example)
 	  with the instruction on which one to do coming as an argument from the executor
 	  so it remains in charge of decision making
