@@ -12,6 +12,7 @@ import scvi # needed for batch correction
 import re # needed to clean up file names
 from pympler import asizeof # needed for memory profiling
 import matplotlib.pyplot as plt
+import scib 
 
 print("batch correction script initiated")
 # import command line arguments from ececutor script
@@ -260,14 +261,21 @@ def plot_corrected_umap(adata):
     corrected_adata = adata.copy()
     corrected_adata.X = corrected_adata.obsm["X_scVI_corrected"]
 
+    print("Clustering corrected data...")
+    print("Scaling...")
     sc.pp.scale(corrected_adata, max_value=10)
+    print("PCA...")
     sc.pp.pca(corrected_adata, svd_solver="arpack")
+    print("Neighbors...")
     sc.pp.neighbors(corrected_adata)
+    print("Leiden clustering...")
     sc.tl.leiden(corrected_adata)
+    print("UMAP...")
     sc.tl.umap(corrected_adata)
 
 
     # Plot to check batch correction
+    print("Plotting UMAP of corrected data...")
     plot_with_external_legend(corrected_adata, color=["leiden", "batch","cancer_state"], title="UMAP of corrected data")
 
 
@@ -291,33 +299,47 @@ def plot_uncorrected_umap(adata):
     This function creates a UMAP plot of the data in the corrected latent
     space. The plot is colored by batch and cell type.
     """
+    print("Clustering uncorrected data...")
 
+    print("Scaling...")
     sc.pp.scale(adata, max_value=10)
+    print("PCA...")
     sc.pp.pca(adata, svd_solver="arpack")
+    print("Neighbors...")
     sc.pp.neighbors(adata)
+    print("Leiden clustering...")
     sc.tl.leiden(adata)
+    print("UMAP...")
     sc.tl.umap(adata)
 
 
     # Plot to check batch correction
+    print("Plotting UMAP of uncorrected data...")
     plot_with_external_legend(adata, color=["leiden", "batch","cancer_state"], title="UMAP of uncorrected data")
 
 
+def get_correction_metrics():
+    return 0
 
 
 
 # execute script
 cancertypes = get_cancer_types(input_data_dir)
 for cancertype in cancertypes:
-    adata = aggregate_batches(cancertype, max_obs_cancerous=50000, max_obs_non_cancerous=50000)
+    adata = aggregate_batches(cancertype, max_obs_cancerous=0, max_obs_non_cancerous=50000)
     print(f"adata size in GB: {asizeof.asizeof(adata) / 1024**3}") # size of adata in GB
 
     adata_hvg = correct_batches(adata, 1000) 
-    plot_corrected_umap(adata_hvg)
-    plot_uncorrected_umap(adata_hvg)
 
 
-    # save the processed data to temporary h5ad file, make relevant directory first
+
+        # save the processed data to temporary h5ad file, make relevant directory first
     final_output_path = os.path.join(output_data_dir,f"batch_corrected_HVG_{cancertype}.h5ad")
     adata_hvg.write(final_output_path)
     print("Output: " + final_output_path)
+
+    # plot only after saving, so I don't change the matrix anymore (eg scaling will brick future PCAs)
+    # plot_corrected_umap(adata_hvg)
+    # plot_uncorrected_umap(adata_hvg)
+
+

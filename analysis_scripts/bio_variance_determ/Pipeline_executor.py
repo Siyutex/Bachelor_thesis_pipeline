@@ -40,7 +40,8 @@ TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage 
 # variable to determine what intermediate files should be saved permanently, one key per script
 OUTCOME_STORAGE = {
     "Preprocessing.py": False,
-    "Batch_correction.py": False,
+    "Batch_correction.py": True,
+    "Cell_type_annotation.py": False,
     "Epithelial_cell_isolation.py": False,
     "Variance.py": False
 }
@@ -257,14 +258,24 @@ def annotate_cell_types(input_data_dir: str):
     output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated")
     output_temp_dir = os.path.join(TEMP_DIR, "cell_type_annotated")
 
+    # check if some batches are already processed
+    processed_batches = []
+    for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated")):
+        processed_batches.append(file.removesuffix(".json").removesuffix("_markers"))
+    processed_batches.append("clear_cell_renal_carcinoma_cancerous_15") # this bitch keeps bugging out, temporary fix
+
     # run script on each file in input_data_dir
     for file in os.listdir(input_data_dir):
-        print("Annotating cell types for: " + file)
-        temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Cell_type_annotation.py"), os.path.join(input_data_dir, file), output_temp_dir)
+        if not file.removeprefix("preprocessed_").removesuffix(".h5ad") in processed_batches:
+            print("Annotating cell types for: " + file)
+            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Cell_type_annotation.py"), os.path.join(input_data_dir, file), output_temp_dir)
 
-        # if specified, permanently store a copy of the temporary output file
-        if OUTCOME_STORAGE["Cell_type_annotation.py"] == True:
-            shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
+            # if specified, permanently store a copy of the temporary output file
+            if OUTCOME_STORAGE["Cell_type_annotation.py"] == True:
+                shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
+        else:
+            print("Cell types already annotated for: " + file + ". Skipping...")
+            continue
 
 def correct_batch_effects(input_data_dir: str):
     """Run Batch_correction.py on a given directory of preprocessed h5ad files.
@@ -343,8 +354,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         '''for raw_data_dir in RAW_DATA_DIRS:
             mode = choose_pipeline_mode(raw_data_dir)
             preprocess_data(mode, raw_data_dir)'''
-        #correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
-        annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
+        correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
+        #annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
     except Exception:

@@ -6,9 +6,9 @@
 import scanpy as sc
 import os
 import sys
-import tempfile
-import numpy as np
 from scipy.sparse import issparse
+import re
+import json
 
 # import command line arguments from ececutor script
 input_data_file = sys.argv[1] if len(sys.argv) > 1 else print("Please provide the path to the input file")
@@ -36,11 +36,16 @@ def process_and_cluster(adata):
     -------
     adata : AnnData
         Anndata object with processed data and leiden cluster labels stored in adata.obs['leiden' | key_added].
-    tissue_type : str
-        String indicating the tissue type (e.g. 'colon','glioma' , etc.).
+    batch : str
+        String indicating the batch of origin
     cancer_state : str
         String indicating the cancer state of the tissue type (e.g. 'cancerous', 'non_cancerous').
     """
+    print("Filtering mitochondiral and ribosomal genes before DEG analysis")
+    ribo_genes = adata.var_names.str.startswith(('RPS', 'RPL'))
+    mito_genes = adata.var_names.str.startswith('MT-')
+    adata = adata[:, ~(ribo_genes | mito_genes)]
+
     print("normalizing data")
     sc.pp.normalize_total(adata, target_sum=1e4)
 
@@ -56,22 +61,26 @@ def process_and_cluster(adata):
 
     # generate k nearest neighbor graph (required for leiden clustering)
     print("computing neighbors")
-    sc.pp.neighbors(adata)
+    sc.pp.neighbors(adata, n_neighbors=30) # consider twice the normal amount of neighbors for bigger clusters
 
     # assign cluster labels
     print("computing leiden clusters")
     sc.tl.leiden(adata) # adds the leiden cluster labels to adata.obs['leiden' | key_added]
+    # print number of cluster and number of cells per cluster
+    print(f"Number of clusters: {adata.obs['leiden'].nunique()}")
+    print(adata.obs['leiden'].value_counts())
 
-    # get tissue type (also contains cancer state)
-    tissue_type = os.path.basename(input_data_file).removeprefix("preprocessed_").removesuffix(".h5ad")
-    if "non_cancerous" in tissue_type:
-        cancer_state = "c"
-        tissue_type = tissue_type.removesuffix("_non_cancerous")
-    elif "cancerous" in tissue_type:
+    # get tissue type and cancer state (also contains cancer state)
+    batch = os.path.basename(input_data_file).removeprefix("preprocessed_").removesuffix(".h5ad")
+    if "non_cancerous" in batch:
         cancer_state = "nc"
-        tissue_type = tissue_type.removesuffix("_cancerous")
+    elif "cancerous" in batch:
+        cancer_state = "c"
 
-    return adata, tissue_type, cancer_state
+    print(batch)
+    print(cancer_state)
+
+    return adata, batch, cancer_state
 
 #-------------------------------------
 # cell type annotation
@@ -85,7 +94,7 @@ def process_and_cluster(adata):
 # export as h5ad with gz compression
 
 
-def annotate_cell_type(adata, tissue_type, cancer_state):
+def annotate_cell_type(adata, batch, cancer_state):
     """
     Annotates the cell type for each cluster in the data.
 
@@ -102,35 +111,36 @@ def annotate_cell_type(adata, tissue_type, cancer_state):
         The annotated data
     """
 
-    # define known marker dictionary
-    marker_dict = {
-        'colon_c': [],
-        'colon_nc': [],
-        'glioma_c': [],
-        'glioma_nc': [],
-        'breast_cancer_c': [],
-        'breast_cancer_nc': [],
-        'CCRC_c': [],
-        'CCRC_nc': [],
-    }
+    # NOTE: cannot just take most highly expressed genes, because each cell has a bunch of actin and rsp and so on
+    # need sig diff genes per cluster
 
-    # loop through each cluster
-    for cluster in adata.obs['leiden'].unique():
-        # subset of adata for the cluster
-        cluster_cells = adata[adata.obs['leiden'] == cluster].X
+    # run differential expression across clusters
+    print("computing differentially expressed genes")
+    sc.tl.rank_genes_groups(adata, groupby="leiden", method="wilcoxon", n_genes=5, use_raw=False)  # limit to 5 genes and don't use raw matrix for speed (would not make sense to process matrix and then not use it), 6 jobs, one per CPU core
 
-        mean_exp = np.array(cluster_cells.X.mean(axis=0)).flatten()
-        top_5_idx = mean_exp.argsort()[::-1][:5] # [::-1] reverses the array, [:5] takes the first 5 elements
-        top_5_genes = adata.var_names[top_5_idx] # list of top 5 gene names in the cluster (should be enough to identify cell type)
+    # top DEGs are stored in adata.uns["rank_genes_groups"]["names"][groups / clusters][top DEG list]
+    result = adata.uns["rank_genes_groups"]
+    groups = result["names"].dtype.names
+
+    # get top 5 marker genes for each cluster
+    print("getting top 5 marker genes for each cluster")
+    top_markers = {}
+    for group in groups:
+        top_markers[group] = result["names"][group][:5].tolist()
+        print(f"Top {len(top_markers[group])} genes in cluster {group}: {top_markers[group]}")#
+    
+    return top_markers
 
 
-        # now go through entire cellmarker 2 database (xlsx) 
-        # for every marker append corresponding cell name to a list
-        # the most common cell name is the annotation, if equal amounts then unknown
-        # also put this out as debugging info
-        # then based on first few datasets curate a manual list of cell types and corresponding markers
-        # annote all ccrc datasets
-        # scANVI
-        # isi ai schisgamber di is squa'im dusch kob labam
+
+
         
-            
+
+adata, batch, cancer_state = process_and_cluster(adata)
+top_markers = annotate_cell_type(adata, batch, cancer_state)
+
+# export marker dictionary as json
+with open(os.path.join(output_data_dir, f"{batch}_markers.json"), "w") as f:
+    json.dump(top_markers, f)
+
+print("Output: " + os.path.join(output_data_dir, f"{batch}_markers.json"))
