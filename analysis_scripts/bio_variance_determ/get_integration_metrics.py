@@ -1,10 +1,17 @@
+# This script takes a batch corrected h5ad file as input
+# It should have bathces, cancer states (or similar conditions, like cell types) annotated in adata.obs
+# It should have a corrected expression matrix in adata.obsm
+# These go into the global constants
+# The script computes integration metrics (currently kBET only), and DEG overlap between the corrected and raw matrices
+# it imports functions from global_scripts. As such, it has to be run from the command line in the root of the repository
+# to do this run python -m analysis_scripts.bio_variance_determ.get_integration_metrics
+
 import scanpy as sc
 import numpy as np
 import pandas as pd
 from collections import Counter
 from scipy.stats import chisquare
 from global_scripts import helper_functions as hf
-
 
 # ---- Inputs ----
 DATA_INPUT = r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\debugging_tmps\test.h5ad"
