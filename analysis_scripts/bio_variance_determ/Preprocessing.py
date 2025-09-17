@@ -18,13 +18,12 @@ import os
 import tempfile
 import tarfile # needed to extract compressed tar files
 import pandas as pd
-import scipy
-import numpy as np
+
 
 
 # import command line arguments from ececutor script
 input_data_path = sys.argv[1] if len(sys.argv) > 1 else print("Please provide the path to the raw data directory. It must contain mtx and tsv files from the 10x genomics pipeline") # can be a folder or a file, depending on the datatype
-output_data_path = sys.argv[2] if len(sys.argv) > 2 else print("Please provide the path to where the output should be saved")
+output_data_dir = sys.argv[2] if len(sys.argv) > 2 else print("Please provide the path to where the output should be saved")
 input_data_type = sys.argv[3] if len(sys.argv) > 3 else print("Please provide the data type. It must be one of the following: MTX_TSVs_in_subfolders, compressed_MTX_TSVs, dot_matrix_files") # string datatype variable to indicate which pipeline mode was chosen in the executor script
 
 
@@ -81,8 +80,9 @@ print(f"{adata.shape[0]} cells and {adata.shape[1]} genes left after preprocessi
 
 
 # save the processed data to temporary h5ad file, make relevant directory first
-final_output_path = os.path.join(output_data_path, os.path.basename(input_data_path) + ".h5ad")
+final_output_path = os.path.join(output_data_dir, os.path.basename(input_data_path) + ".h5ad")
 adata.write(final_output_path)
+
 
 # foward the path to the temporary file to the executor script via stdout
 print("Output: " + final_output_path)

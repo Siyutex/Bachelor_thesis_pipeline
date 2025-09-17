@@ -12,6 +12,7 @@ import re # needed to clean up file names
 from pympler import asizeof # needed for memory profiling
 import matplotlib.pyplot as plt
 from global_scripts import helper_functions as hf
+import json
 
 print("batch correction script initiated")
 # import command line arguments from ececutor script
@@ -85,6 +86,8 @@ def aggregate_batches(cancer_type: str, max_obs_cancerous: int = None, max_obs_n
     -------
     anndata.AnnData
         AnnData object merged based on parameters from batches for the given cancer_type
+    list
+        List of file names that have been loaded
     """
     vprint = hf.make_vprint(verbose)
 
@@ -92,6 +95,8 @@ def aggregate_batches(cancer_type: str, max_obs_cancerous: int = None, max_obs_n
     batch_filenames = sorted([f for f in os.listdir(INPUT_DIR) if f.startswith(f"{IMPORT_PREFIX}_{cancer_type}")], key=natural_key) # sort according to numbers in suffix (e.g. 1, 2, 3)
     batch_names = [f.removesuffix(".h5ad").removeprefix(f"{IMPORT_PREFIX}_") for f in batch_filenames] # like cancer_type_cancerous_1
     cancer_state = ["non_cancerous" if "non_cancerous" in f else "cancerous" for f in batch_names] # cancerous or non_cancerous
+
+    processed_batches = [] # list of batches that wer loaded (= used or skipped), used for metadata in executor script
 
     # make batch names shorter (cancerous needs to be first,  bcs "cancerous" is a substring of "non_cancerous")
     for i, batch_name in enumerate(batch_names):
@@ -121,6 +126,7 @@ def aggregate_batches(cancer_type: str, max_obs_cancerous: int = None, max_obs_n
 
         # read and annotate
         new_adata = sc.read_h5ad(os.path.join(INPUT_DIR, batch_file_name))
+        processed_batches.append(batch_file_name)
         new_adata.obs["batch"] = batch_names[i] # assign batch label to each cell in new_adata
         new_adata.obs["cancer_state"] = state # assign cancer state to each cell in new_adata
 
@@ -139,7 +145,7 @@ def aggregate_batches(cancer_type: str, max_obs_cancerous: int = None, max_obs_n
         adata = sc.AnnData()  # empty
         print(f"No data for {cancer_type} found.")
 
-    return adata
+    return adata, processed_batches
 
 def correct_batches(adata, max_considered_genes: int = None):
     """
@@ -335,17 +341,25 @@ def get_correction_metrics():
 # execute script
 cancertypes = get_cancer_types(INPUT_DIR)
 for cancertype in cancertypes:
-    adata = aggregate_batches(cancertype, max_obs_cancerous=0, max_obs_non_cancerous=50000)
+    adata, processed_batches = aggregate_batches(cancertype, max_obs_cancerous=0, max_obs_non_cancerous=50000)
     print(f"adata size in GB: {asizeof.asizeof(adata) / 1024**3}") # size of adata in GB
 
     adata_hvg = correct_batches(adata, 1000) 
 
 
 
-        # save the processed data to temporary h5ad file, make relevant directory first
+    # save the processed data to temporary h5ad file, make relevant directory first
     final_output_path = os.path.join(OUTPUT_DIR,f"batch_corrected_HVG_{cancertype}.h5ad")
     adata_hvg.write(final_output_path)
     print("Output: " + final_output_path)
+
+    # save metadata to temp as well
+    with open(os.path.join(OUTPUT_DIR, f"metadata.json"), "w") as f:
+        json.dump(processed_batches, f)
+    print("Metadata: " + os.path.join(OUTPUT_DIR, f"metadata.json"))
+
+
+
 
     # plot only after saving, so I don't change the matrix anymore (eg scaling will brick future PCAs)
     # plot_corrected_umap(adata_hvg)
