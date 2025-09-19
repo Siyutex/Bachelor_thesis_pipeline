@@ -1,5 +1,2 @@
 Data/
-auxiliary_data/
 my_scvi_model/
-global_scripts/__pycache__
-auxiliary_scripts/__pycache__

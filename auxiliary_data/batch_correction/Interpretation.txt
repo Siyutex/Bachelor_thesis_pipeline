@@ -1,0 +1,9 @@
+- UMAP_Colon_cancer_HVG_first5batches shows that HVG selection in preprocessing completely messes up the clusters, meaning we cannot use data limited to HVGs for batch correction bcs the similarities which are important for batch correction get lost if the gene sets don't overlap (which happens if we select different HVG sets between datasets, which is somehow the norm)
+
+- UMAP_Colon_cancer_noHVG_first5batches shows that, if we don't use data limited to HVGs we get some overlapping but slightly shifted clusters, means we can run batch correction
+
+- UMAP_colon_both_noHVG_first2batches shows that there is minimal overlap between the cancer and non cancer sets, even if not limited to HVGs, meaning that we probably cannot run batch correction because there are no similar cell types left
+
+- overall, this means that I should run batch correction seperately for cancer and non cancer within each cancer type and then figure out a way to still be able to run pseudotime on their union without having batch effects between cancer and non cancer fuck everything up
+
+- solution: run batch correction for each lineage with cells from all datasets within one cancer + normal tissue datagroup, and keep every step in gene expression space

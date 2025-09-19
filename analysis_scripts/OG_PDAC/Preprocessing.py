@@ -1,3 +1,5 @@
+# We assume the input is the OG PDAC dataset. It was sequenced with 10x chromium, 3000 recovered cells per batch
+# thus we expect ~2.4% doublets according to https://kb.10xgenomics.com/hc/en-us/articles/360001378811-What-is-the-maximum-number-of-cells-that-can-be-profiled
 # removes:
 """
 Cells with less than 500 genes expressed
@@ -19,7 +21,6 @@ import os
 import tempfile
 import tarfile # needed to extract compressed tar files
 import pandas as pd
-import scipy
 import numpy as np
 
 
@@ -48,31 +49,33 @@ elif input_data_type == "dot_matrix_files":
     temp_df = pd.read_csv(input_data_path, sep="\t", index_col=0) # rows are genes, columns are cells, need to transpose to fit with annData format
     adata = sc.AnnData(temp_df.T) # transpose the dataframe to have cells as rows and genes as columns
 
+print(f"{adata.shape[0]} cells and {adata.shape[1]} genes present before preprocessing")
 
-
-print("filtering data")
-# filtering
-sc.pp.filter_cells(adata, min_genes=500)  # filter cells with less than 500 genes expressed
+print("filtering cells with low gene counts")
+print("filtering genes with low cell counts")
+# filtering cells and genes
+adata.obs['n_genes'] = adata.X.getnnz(axis=1) # number of entries per cell (including explicitly stored 0s, of which there are none here)
+sc.pp.filter_cells(adata, min_genes=int(np.percentile(adata.obs['n_genes'], 10))) # filter cells that have less genes expressed than the 10th percentile (the cell with the highest amount of genes in the bottom 10% of cells)
 sc.pp.filter_genes(adata, min_cells=int(0.01*adata.n_obs))  # filter genes expressed in less than 1% of cells
 
 print("removing low UMI count cells")
-# remove cells with less than 1000 UMI counts
-adata.obs['n_counts'] = adata.X.sum(axis=1)  # convert sparse matrix to dense array and sum counts per cell (axis=1 means it looks through all columns(genes) per row(cell))
-adata = adata[adata.obs['n_counts'] > 1000, :]  # keep cells with more than 1000 UMI counts
+# remove cells with less UMI counts than the 10th percentile
+adata.obs['n_counts'] = np.array(adata.X.sum(axis=1)).flatten() # add all umi counts for each cell (row)
+adata = adata[adata.obs['n_counts'] > int(np.percentile(adata.obs['n_counts'], 10)), :]  # keep cells with more UMI counts than the 10th percentile
 
 print("removing cells with high mitochondrial gene expression")
-# remove cells with high mitochondrial gene expression (>25%)
 adata.var["mito"] = adata.var_names.str.startswith("MT-")  # identify mitochondrial genes, assuming they start with "MT-"
-sc.pp.calculate_qc_metrics(adata, qc_vars=["mito"], percent_top=None, log1p=False, inplace=True)
-# The mitochondrial percentage will be in adata.obs['pct_counts_MT-']
-# Filter cells with mitochondrial fraction < 25%
-adata = adata[adata.obs['pct_counts_mito'] < 25, :]
+adata.obs["pct_counts_mito"] = adata.X[:, adata.var["mito"].values].sum(axis=1) / adata.X.sum(axis=1)
+mito_cutoff = np.median(adata.obs['pct_counts_mito']) + np.median(np.abs(adata.obs['pct_counts_mito'] - np.median(adata.obs['pct_counts_mito']))) # median + MAD
+adata = adata[adata.obs['pct_counts_mito'] < mito_cutoff, :]
 
 # remove doublets 
-sc.pp.scrublet(adata, expected_doublet_rate=0.05)
+print("removing doublets")
+sc.pp.scrublet(adata, expected_doublet_rate=0.024) # boolean prediction in .obs['predicted_doublet']
+adata = adata[~adata.obs['predicted_doublet']] # ~ is a bitwise NOT operator, so we keep all cells where predicted_doublet == False
 
 # print to console how many cells and genes are left after preprocessing
-print(f"{adata.shape[0]} cells and {adata.shape[1]} genes left after preprocessing the file: {os.path.basename(input_data_path)}")
+print(f"{adata.shape[0]} cells and {adata.shape[1]} genes left after preprocessing")
 
 
 # save the processed data to temporary h5ad file, make relevant directory first

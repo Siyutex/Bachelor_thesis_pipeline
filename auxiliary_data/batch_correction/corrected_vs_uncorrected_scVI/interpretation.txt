@@ -1,0 +1,13 @@
+- the cancer and noncancer cells of where not all merged into one by scvi which means it can conserve the differnce 
+	- while hopefully correcting batch effects, but that is not evident by the cancer vs noncancer figures
+
+- the batches where quite overlapping before correction, but after correction the are more seperate, this is quite odd
+	- it means maybe batch differences where interpreted as biological differences 
+
+- In general, I would say this does not rule out batch correction with scVI /svANVI
+	- so I should annote all cells using celltypist
+	- then recorrect with scANVI
+	- I have 2 advantages now
+		- scANVI is better than scVI
+		- I can verify if biologically similar cells cluster together after correction, while batches are dispersed throughout one another
+		(- before correction, batches should be more isolated, while potentially still having biologicall similar cells cluster close to eachother)

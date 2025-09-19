@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from collections import Counter
 from scipy.stats import chisquare
-from global_scripts import helper_functions as hf
+import helper_functions as hf
 
 # ---- Inputs ----
 DATA_INPUT = r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\debugging_tmps\test.h5ad"

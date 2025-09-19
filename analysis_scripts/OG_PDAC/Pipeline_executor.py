@@ -27,8 +27,8 @@ if not os.path.exists(os.path.join(tempfile.gettempdir(),"python")):
 SCRIPT_DIR = os.path.dirname(__file__)  # directory where this script is located
 # list of directories (see choose_pipeline_mode for valid structures for each entry)
 RAW_DATA_DIRS = [
-                os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining","cancerSCEM","clear_cell_renal_carcinoma_cancerous"),
-                os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining","cancerSCEM","clear_cell_renal_carcinoma_non_cancerous"),
+                os.path.join(SCRIPT_DIR, "..", "..", "Data","OG_data","NCBI","PDAC_cancerous"),
+                os.path.join(SCRIPT_DIR, "..", "..", "Data","OG_data","NCBI","PDAC_non_cancerous"),
                 ]
 OUTPUT_STORAGE_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data", "output_storage")  # directory for optional permanent storage of indermediate subprocess outputs
 TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage of temporary pipeline files
@@ -380,10 +380,9 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
     # --- main loop ---
 
     try:
-        '''for raw_data_dir in RAW_DATA_DIRS:
+        for raw_data_dir in RAW_DATA_DIRS:
             mode = choose_pipeline_mode(raw_data_dir)
-            preprocess_data(mode, raw_data_dir)'''
-        prepare_for_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
+            preprocess_data(mode, raw_data_dir)
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
     except Exception:
