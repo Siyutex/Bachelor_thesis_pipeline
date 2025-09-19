@@ -82,7 +82,7 @@ print(f"{adata.shape[0]} cells and {adata.shape[1]} genes left after preprocessi
 
 # save the processed data to temporary h5ad file, make relevant directory first
 final_output_path = os.path.join(output_data_path, os.path.basename(input_data_path) + ".h5ad")
-adata.write(final_output_path)
+adata.write(final_output_path, compression="gzip")
 
 # foward the path to the temporary file to the executor script via stdout
 print("Output: " + final_output_path)

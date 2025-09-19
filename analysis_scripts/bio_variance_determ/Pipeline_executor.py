@@ -9,9 +9,6 @@ import shutil # needed for file storage operations
 import tempfile # needed for temporary file operations
 import sys # needed to exit the program
 
-from rich.traceback import install # needed for pretty printing of tracebacks
-install(show_locals=True, suppress=[]) # install rich traceback handler
-
 
 #check if the required directories exist, if not create them
 if not os.path.exists(os.path.join(os.path.dirname(__file__), "..", "..", "Data")):  # check if data directory exists
@@ -40,6 +37,7 @@ TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage 
 # variable to determine what intermediate files should be saved permanently, one key per script
 OUTCOME_STORAGE = {
     "Preprocessing.py": False,
+    "prepare_for_pseudotime.py": True,
     "Batch_correction.py": True,
     "Cell_type_annotation.py": False,
     "Epithelial_cell_isolation.py": False,
@@ -247,7 +245,8 @@ def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
 
 
 def annotate_cell_types(input_data_dir: str):
-    """Run Cell_type_annotation.py on a given directory of preprocessed h5ad files.
+    """ WIP; DOES NOT WORK
+    Run Cell_type_annotation.py on a given directory of preprocessed h5ad files.
     Creates necessary directories if not present. Saves output permanenlty if specified."""
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have cell_type_annotated folder, if not create it
@@ -278,7 +277,8 @@ def annotate_cell_types(input_data_dir: str):
             continue
 
 def correct_batch_effects(input_data_dir: str):
-    """Run Batch_correction.py on a given directory of preprocessed h5ad files.
+    """ WIP; DOES NOT WORK
+    Run Batch_correction.py on a given directory of preprocessed h5ad files.
     Creates necessary directories if not present. Saves output permanenlty if specified."""
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
@@ -296,6 +296,35 @@ def correct_batch_effects(input_data_dir: str):
     # if specified, permanently store a copy of the temporary output file
     if OUTCOME_STORAGE["Batch_correction.py"] == True:
         shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
+
+
+def prepare_for_pseudotime(input_data_dir: str):
+    script_path = os.path.join(SCRIPT_DIR, "prepare_for_pseudotime.py")
+    script_name = os.path.basename(script_path).removesuffix(".py")
+
+    #check if OUTCOME_STORAGE_DIR and TEMP_DIR have relevant folder, if not create it
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, script_name), exist_ok=True)
+    os.makedirs(os.path.join(TEMP_DIR, script_name), exist_ok=True)
+
+    # assign directories for temporary and permanent storage
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, script_name)
+    output_temp_dir = os.path.join(TEMP_DIR, script_name)
+
+    # run script and assign path to temporary output file
+    print(f"Prepping for pseudotime: {input_data_dir}")
+    execute_subprocess(script_path, input_data_dir, output_temp_dir)
+
+    # if specified, permanently store a copy of the temporary output file
+    if OUTCOME_STORAGE[script_name + ".py"] == True:
+        for file in os.listdir(output_temp_dir):
+            shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, os.path.basename(file)))
+
+    return None
+
+
+def infer_pseudotime(input_data_dir: str):
+    return None
+
 
 def isolate_epithelial_cells():
     """Loops through the preprocessed h5ad files in temp/preprocessed and runs Epithelial_cell_isolation.py on each."""
@@ -354,8 +383,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         '''for raw_data_dir in RAW_DATA_DIRS:
             mode = choose_pipeline_mode(raw_data_dir)
             preprocess_data(mode, raw_data_dir)'''
-        correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
-        #annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
+        prepare_for_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
     except Exception:

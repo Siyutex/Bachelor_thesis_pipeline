@@ -10,10 +10,6 @@ import tempfile
 import os
 import tarfile
 
-filepath = r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\pretraining\cancerSCEM\clear_cell_renal_carcinoma_non_cancerous\ccRCC-061-19-1A.counts.matrix.tsv.gz"
-filepath2 = r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\pretraining\GDC\adenoma_adenocarcinoma_cancerous\Adenomas and Adenocarcinomas_Kidney_02fd7af0-5915-42ae-96c5-01c8d54f8dea"
-datatype = "CancerSCEM"
-
 def check_matrix(filepath, type):
 
     if type == "CancerSCEM":
@@ -27,6 +23,9 @@ def check_matrix(filepath, type):
                     with tarfile.open(file_path, "r:gz") as tar:
                         tar.extractall(path=temp_dir)
             adata = sc.read_10x_mtx(os.path.join(temp_dir, os.listdir(temp_dir)[0]))
+    if type == "NCBI":
+        # read mtx file, and tsv files from the current folder in the raw_data directory
+        adata = sc.read_10x_mtx(filepath)  
     
     
     print(f" Shape of adata is {adata.shape}")
@@ -61,5 +60,6 @@ def check_matrix(filepath, type):
 
 
 
-
-check_matrix(filepath, datatype)
+for subdir in os.listdir(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\OG_data\NCBI\PDAC_cancerous"):
+    filepath = os.path.join(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\OG_data\NCBI\PDAC_cancerous", subdir)
+    check_matrix(filepath, "NCBI")
