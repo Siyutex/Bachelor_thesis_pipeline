@@ -11,7 +11,7 @@ import scvi # needed for batch correction
 import re # needed to clean up file names
 from pympler import asizeof # needed for memory profiling
 import matplotlib.pyplot as plt
-from global_scripts import helper_functions as hf
+import helper_functions as hf
 
 print("batch correction script initiated")
 # import command line arguments from ececutor script
