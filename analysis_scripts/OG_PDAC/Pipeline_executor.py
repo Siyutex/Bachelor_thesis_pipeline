@@ -27,8 +27,8 @@ if not os.path.exists(os.path.join(tempfile.gettempdir(),"python")):
 SCRIPT_DIR = os.path.dirname(__file__)  # directory where this script is located
 # list of directories (see choose_pipeline_mode for valid structures for each entry)
 RAW_DATA_DIRS = [
+                os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining", "cancerSCEM", "colon_cancer_cancerous"),    
                 os.path.join(SCRIPT_DIR, "..", "..", "Data","OG_data","NCBI","PDAC_cancerous"),
-                os.path.join(SCRIPT_DIR, "..", "..", "Data","OG_data","NCBI","PDAC_non_cancerous"),
                 ]
 OUTPUT_STORAGE_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data", "output_storage")  # directory for optional permanent storage of indermediate subprocess outputs
 TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage of temporary pipeline files
@@ -36,9 +36,9 @@ TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage 
 
 # variable to determine what intermediate files should be saved permanently, one key per script
 OUTCOME_STORAGE = {
-    "Preprocessing.py": False,
-    "prepare_for_pseudotime.py": True,
-    "Batch_correction.py": True,
+    "Preprocessing.py": True,
+    "prepare_for_pseudotime.py": False,
+    "Batch_correction.py": False,
     "Cell_type_annotation.py": False,
     "Epithelial_cell_isolation.py": False,
     "Variance.py": False
@@ -178,13 +178,13 @@ def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
     
     # output path for preprocessed files with a prefix in a subdirectory of OUTCOME_STORAGE_DIR
     if OUTCOME_STORAGE["Preprocessing.py"] == True:
-        output_storage_path = os.path.join(OUTPUT_STORAGE_DIR, "preprocessed")
+        output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "preprocessed")
 
     # check if preprocessed folder exists in TEMP_DIR, if not create it
     os.makedirs(os.path.join(TEMP_DIR, "preprocessed"), exist_ok=True)
 
     # assign output path variable to be equal to TEMP_DIR/preprocessed
-    output_path = os.path.join(TEMP_DIR, "preprocessed")
+    output_temp_dir = os.path.join(TEMP_DIR, "preprocessed")
 
     # assign datatype variable based on chosen pipeline mode
     datatype = pipeline_mode.name
@@ -197,15 +197,15 @@ def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
         # iterate over folders in raw data directory containing two tsv files and one mtx file each
         for folder in os.listdir(raw_data_dir):
             print("Currently preprocessing: " +  folder)
-            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_path, datatype)
+            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_temp_dir, datatype)
             
             # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
-            os.rename(temp_output_path, os.path.join(output_path, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
-            temp_output_path = os.path.join(output_path, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad")
+            os.rename(temp_output_path, os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
+            temp_output_path = os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad")
 
             # if specified, permanently store a copy of the temporary output file
             if OUTCOME_STORAGE["Preprocessing.py"] == True:
-                shutil.copy(temp_output_path, os.path.join(output_storage_path, os.path.basename(temp_output_path)))
+                shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
             i += 1
 
@@ -214,15 +214,15 @@ def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
         # iterate over folder in raw data directory, then forward compressed files in them
         for folder in os.listdir(raw_data_dir):
             print("Currently preprocessing: " +  folder)
-            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_path, datatype)
+            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_temp_dir, datatype)
 
             # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
-            os.rename(temp_output_path, os.path.join(output_path, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
-            temp_output_path = os.path.join(output_path, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad")
+            os.rename(temp_output_path, os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
+            temp_output_path = os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad")
 
             # if specified, permanently store a copy of the temporary output file
             if OUTCOME_STORAGE["Preprocessing.py"] == True:
-                shutil.copy(temp_output_path, os.path.join(output_storage_path, os.path.basename(temp_output_path)))
+                shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
             i += 1
 
@@ -231,15 +231,15 @@ def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
         # directly forward .matrix files in RAW_DATA_DIR
         for file in os.listdir(raw_data_dir):
             print("Currently preprocessing: " +  file)
-            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, file), output_path, datatype)
+            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, file), output_temp_dir, datatype)
 
             # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
-            os.rename(temp_output_path, os.path.join(output_path, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
-            temp_output_path = os.path.join(output_path, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad")
+            os.rename(temp_output_path, os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
+            temp_output_path = os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad")
 
             # if specified, permanently store a copy of the temporary output file
             if OUTCOME_STORAGE["Preprocessing.py"] == True:
-                shutil.copy(temp_output_path, os.path.join(output_storage_path, os.path.basename(temp_output_path)))
+                shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
             i += 1
 
@@ -257,24 +257,15 @@ def annotate_cell_types(input_data_dir: str):
     output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated")
     output_temp_dir = os.path.join(TEMP_DIR, "cell_type_annotated")
 
-    # check if some batches are already processed
-    processed_batches = []
-    for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated")):
-        processed_batches.append(file.removesuffix(".json").removesuffix("_markers"))
-    processed_batches.append("clear_cell_renal_carcinoma_cancerous_15") # this bitch keeps bugging out, temporary fix
-
     # run script on each file in input_data_dir
     for file in os.listdir(input_data_dir):
-        if not file.removeprefix("preprocessed_").removesuffix(".h5ad") in processed_batches:
-            print("Annotating cell types for: " + file)
-            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Cell_type_annotation.py"), os.path.join(input_data_dir, file), output_temp_dir)
+        print("Annotating cell types for: " + file)
+        temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Cell_type_annotation.py"), os.path.join(input_data_dir, file), output_temp_dir)
 
-            # if specified, permanently store a copy of the temporary output file
-            if OUTCOME_STORAGE["Cell_type_annotation.py"] == True:
-                shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
-        else:
-            print("Cell types already annotated for: " + file + ". Skipping...")
-            continue
+        # if specified, permanently store a copy of the temporary output file
+        if OUTCOME_STORAGE["Cell_type_annotation.py"] == True:
+            shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
+
 
 def correct_batch_effects(input_data_dir: str):
     """ WIP; DOES NOT WORK
@@ -380,9 +371,10 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
     # --- main loop ---
 
     try:
-        for raw_data_dir in RAW_DATA_DIRS:
+        '''for raw_data_dir in RAW_DATA_DIRS:
             mode = choose_pipeline_mode(raw_data_dir)
-            preprocess_data(mode, raw_data_dir)
+            preprocess_data(mode, raw_data_dir)'''
+        annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
     except Exception:

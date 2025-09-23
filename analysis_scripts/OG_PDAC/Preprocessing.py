@@ -22,6 +22,7 @@ import tempfile
 import tarfile # needed to extract compressed tar files
 import pandas as pd
 import numpy as np
+from scipy import sparse
 
 
 # import command line arguments from ececutor script
@@ -48,6 +49,10 @@ elif input_data_type == "dot_matrix_files":
     # directly read the forwarded .matrix file = raw_data
     temp_df = pd.read_csv(input_data_path, sep="\t", index_col=0) # rows are genes, columns are cells, need to transpose to fit with annData format
     adata = sc.AnnData(temp_df.T) # transpose the dataframe to have cells as rows and genes as columns
+
+# standardize adata to use scipy sparse matrix for X, or getnnz will not work
+if type(adata.X) != sparse.csc_matrix:
+    adata.X = sparse.csc_matrix(adata.X)
 
 print(f"{adata.shape[0]} cells and {adata.shape[1]} genes present before preprocessing")
 
