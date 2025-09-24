@@ -39,7 +39,7 @@ OUTCOME_STORAGE = {
     "Preprocessing.py": True,
     "prepare_for_pseudotime.py": False,
     "Batch_correction.py": False,
-    "Cell_type_annotation.py": False,
+    "Cell_type_annotation.py": True,
     "Epithelial_cell_isolation.py": False,
     "Variance.py": False
 }
@@ -245,9 +245,10 @@ def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
 
 
 def annotate_cell_types(input_data_dir: str):
-    """ WIP; DOES NOT WORK
+    """ 
     Run Cell_type_annotation.py on a given directory of preprocessed h5ad files.
-    Creates necessary directories if not present. Saves output permanenlty if specified."""
+    Creates necessary directories if not present. Saves output permanenlty if specified.
+    """
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have cell_type_annotated folder, if not create it
     os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), exist_ok=True)

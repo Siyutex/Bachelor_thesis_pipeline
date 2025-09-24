@@ -4,10 +4,11 @@ Preprocessing:
 	- max mitochondrial percentage: use median + 1xMAD as cutoff, WHY: percentile cutoffs are way too high here (sometimes 80% mito expression), if it is 
 	  above 30 you can be quite sure it is garbage and dying, median + 1xMAD is quite consistent with what I would choose by eye from a violin plot
 	- min cells per gene: keep genes expressed in >1% of cells, WHY: both median + 1xMAD and bottom 10 percent suggest I have no cutoff, BUT I will do HVG 	  selection anyway and genes that don't even exist in most cells cannot be HVGs; also even if they would define a cluster, that cluster will be small 	  and not epithelial cells so I will dump it anyway (ie dump all cells with that gene so it is the same if I just dump them right away)
+- doublet detection	
 	- scrublet expected doublets: 2.4% for 3000 recovered cells (3000 is according to https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE212966#:	  ~:text=Summary%20Pancreatic%20ductal%20adenocarcinoma%20,plot%20to%20predict%20the%20overall), WHY: The 10x genomics website says that is a good 	  choice: https://kb.10xgenomics.com/hc/en-us/articles/360001378811-What-is-the-maximum-number-of-cells-that-can-be-profiled
 
 Marker_isolation: 
-- marker selection: see marker document in auxiliary data, verified by literature / wikipedia
+- marker selection: see marker document in auxiliary data, verified by literature / wikipedia, cellmarker 2.0
 - normalization so high expression cells don't bias the mean expression of each marker
 - no logarithmization because we already z scored, so we count in stdevs which should be same for high and low expr genes (heteroscedacity should be accounted for in preprocessing)
 - mean score for each marker set accounts for marker set size

@@ -1,16 +1,7 @@
-# this script will do PCA / UMAP and color cells according to the batch they belong to
-# which will help asses how / if batch correction will be done
-
-# 1 function to aggregate batches
-# it will take directories as arguments and save each file contained therein as a batch
-# merging all batches into 1 anndata object with a obs key for the batch number = filename of batch
-
-
-# then just do the normal embedding
-
-# color per batch and display as clusterplot
-
-#!/usr/bin/env python3
+# this script will produce 2D embeddings with UMAP for visualization
+# it can take any number of annotated batches as input
+# if several batches are passed, it will merge them into 1 object, then cluster and plot, batch, leiden and annotations
+# if one batch is passed, it will just cluster and plot, leiden and annotations 
 
 import os
 import sys
@@ -18,8 +9,13 @@ import scanpy as sc
 import anndata
 import matplotlib.pyplot as plt
 
-directories = [r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\batch_correction_validation"]
-sample_size = 2  # how many files to sample from each directory, to avoid memory issues
+# import command line arguments from ececutor script
+input_data_file_or_dir = sys.argv[1] if len(sys.argv) > 1 else print("Please provide the path to the input file")
+output_data_dir = sys.argv[2] if len(sys.argv) > 2 else print("Please provide the path to the output directory")
+
+# WIP decode from json python list object
+annotations = sys.argv[3] if len(sys.argv) > 3 else print("Please provide a list with the annotation fields in adata.obs")
+
 
 def aggregate_batches(directories: list[os.PathLike], sample_size: int = 1):
     """

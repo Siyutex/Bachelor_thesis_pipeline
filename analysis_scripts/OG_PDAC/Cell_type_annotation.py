@@ -21,75 +21,36 @@ output_data_dir = sys.argv[2] if len(sys.argv) > 2 else print("Please provide th
 print("Reading data")
 adata = sc.read_h5ad(input_data_file)
 
+# original marker list
+MARKER_LISTS = { # verified with cellmarker 2.0
+    # epithelial 
+    "ductal_cell": ["CFTR", "SOX9", "MUC1", "EPCAM", "KRT8", "KRT18", "KRT19", "CDH1"],
+    "acinar_cell": ["PRSS1", "PRSS2", "CPA1", "CPA2", "AMY2A/B", "CELA3A", "EPCAM", "KRT8", "KRT18", "KRT19", "CDH1"],
 
-# global constants
-THRESHOLD = 0.5
-MARKER_LISTS = {
-    "epithelial_cell": ["EPCAM", "KRT8", "KRT18", "KRT19", "CDH1"],
-    "immune_cell": ["PTPRC"], # PTPRC = CD45
+    # endocrine
+    "alpha-cell": ["GCG"],
+    "beta-cell": ["INS"],
+    "delta-cell": ["SST"],
+    "PP-cell": ["PPY"],
+    "epsilon-cell": ["GHRL"],
+
+    # immunte
+    "T_cell": ["PTPRC", "CD3D", "CD3E", "CD4", "CD8A"],
+    "B_cell": ["PTPRC", "CD19", "CD79A", "MS4A1", "MZB1"],
+    "NK_cell": ["PTPRC", "NCAM1", "NKG7", "GNLY"],
+    "macrophage": ["PTPRC", "CD14", "CD68", "LYZ", "FCGR3A"],
+    "dendritic_cell": ["PTPRC", "ITGAX", "CLEC9A"],
+    "neutrophil": ["PTPRC", "S100A8", "S100A9", "FCGR3B"],
+    "mast_cell": ["PTPRC", "TPSAB1", "KIT"],
+
+    # stromal
     "fibroblast": ["PDGFRA", "VIM", "COL1A1", "COL1A2", "LUM", "DCN"],
     "endothelial_cell": ["PECAM1", "VWF", "CLDN5"],
     "smooth_muscle_cell": ["ACTA2", "PDGFRB", "RGS5"],
 }
 
-
-
-
-
-
-
-# annotate based on score
-def annotate_markers_basic():
-    ''' Original annotation approach, mean score + average deviation from mean used for annotation.
-
-        Issues: 
-        - if a cell type has more marker genes associated with it, it will have a higher score
-          than one with less marker genes (at similar marker expression levels) 
-        - if we would normalize the score be the amount of marker genes, then adding a lowly
-          expressed marker gene would reduce the impact of highly expressed marker genes which 
-          might be cell type defining because of the high expression'''
-    
-    # normalize expression per cell
-    print("Normalizing expression")
-    sc.pp.normalize_total(adata, target_sum=1e4, inplace=True) # does not affect n_counts in adata.obs, but affects adata.X (so even though each cell now has 10000 transcripts in X, n_counts is still what it was before normalization)
-    sc.pp.log1p(adata)
-
-    # assing score to all cells for each marker set
-    print("Assigning cell type scores")
-    for cell_type, marker_list in MARKER_LISTS.items():
-        sc.tl.score_genes(adata, marker_list, score_name=cell_type + "_score")
-
-    print("Annotating cells")
-    adata.obs["cell_type"] = None # add column for annotations
-    for cell in range(adata.shape[0]):
-        # get scores for each possible cell type / marker list for this cell
-        scores = dict(zip(MARKER_LISTS.keys(), [0 for i in range(len(MARKER_LISTS))]))
-        for marker_list in MARKER_LISTS.keys():
-            scores[marker_list] += adata.obs.iloc[cell, adata.obs.columns.get_loc(marker_list + "_score")]
-
-        '''# print scores for each cell type for debugging
-        print(f"Scores for cell {cell}: {scores}")'''
-
-
-        # calculate mean score and difference from mean score
-        mean_score = np.mean(list(scores.values()))
-        diff_from_mean_score = []
-        for score in scores.values():
-            diff_from_mean_score.append(np.abs(score - mean_score))
-
-        # add annotations
-        # add column for cell type, accessed later
-        if any(score > THRESHOLD for score in scores.values()):
-            if np.mean(diff_from_mean_score) < THRESHOLD:
-                adata.obs.iloc[cell, adata.obs.columns.get_loc("cell_type")] = "unsure" # if the scores are to close together we cannot be sure about the celltype
-            else:
-                adata.obs.iloc[cell, adata.obs.columns.get_loc("cell_type")] = max(scores, key=scores.get)
-        else:
-            adata.obs.iloc[cell, adata.obs.columns.get_loc("cell_type")] = "other" # if none of the provided cell types have scores above the threshold, it might be a cell type that was not considered
-
-
 def annotate_markers_z_score(adata, cutoff_unsure, cutoff_other): # cutoff is a value between 0 and 1, specifying how high the second highest score can at most be relative to the highest to still annotate a well defined cell type
-    # normlaize (if we don't, then cells with very high overall expression shift, the means of the genes
+    # normalize (if we don't, then cells with very high overall expression shift, the means of the genes
     # and thus the z score)
     # logarithmization not needed, because highly and lowly expressed markers already contribute on the same
     # scale because of 0 mean and counting stdevs instead of counts
@@ -109,17 +70,29 @@ def annotate_markers_z_score(adata, cutoff_unsure, cutoff_other): # cutoff is a 
     for celltype, marker_list in MARKER_LISTS.items():
         marker_levels = internal_adata[:, internal_adata.var_names.isin(marker_list)]
         marker_levels = np.array(marker_levels.X.todense())
-        adata.obs[celltype + "_score"] = marker_levels.mean(axis=1) # want to add scores to actual adata
+
+        # check if array is not empty (if it is empty that means that there is no overlap between
+        #  marker gene set and the var names of the batch, ie that gene was removed in the batch
+        #  because it was present in an insiginificant amount of cells)
+        if marker_levels.size != 0:
+            adata.obs[celltype + "_score"] = marker_levels.mean(axis=1) # want to add scores to actual adata
+        else:
+            adata.obs[celltype + "_score"] = np.zeros(adata.shape[0])
 
     adata.obs['cell_type'] = None
     score_columns = [key + "_score" for key in MARKER_LISTS.keys()]
 
     for cell in range(adata.shape[0]):
         ranked_score_list = []
+        # rank cell type scores for the cell
         for column in score_columns:
             ranked_score_list.append((column.removesuffix("_score"), adata.obs.iloc[cell, adata.obs.columns.get_loc(column)])) # append a tuple with name of cell type and score for that cell type
         ranked_score_list = sorted(ranked_score_list, key=lambda x: x[1], reverse=True) # rank by the value at index 1 in the tuple (the actual score for that cell type)
 
+        # Annotate
+        # if all scores are below cutoff_other, annotate as "other"
+        # if the second highest score is > cutoff_unsure * highest score, annotate as "unsure"
+        # otherwise, annotate as the celltype with the highest score
         if any(score[1] > cutoff_other for score in ranked_score_list): 
             if ranked_score_list[1][1] > cutoff_unsure * ranked_score_list[0][1]:
                 adata.obs.iloc[cell, adata.obs.columns.get_loc('cell_type')] = "unsure"
@@ -130,68 +103,43 @@ def annotate_markers_z_score(adata, cutoff_unsure, cutoff_other): # cutoff is a 
 
     return None
 
-def annotate_reference():
-    return None
+
+def display_fractions(adata):
+    # display global fraction of each cell type as dataframe
+    data = []
+    # go through your known marker-based cell types
+    for cell_type, marker_list in MARKER_LISTS.items():
+        frac = np.sum(adata.obs["cell_type"] == cell_type) / adata.shape[0]
+        data.append((cell_type, frac))
+
+    # add the "other" and "unsure" categories
+    for special in ["other", "unsure"]:
+        frac = np.sum(adata.obs["cell_type"] == special) / adata.shape[0]
+        data.append((special, frac))
+
+    # make DataFrame
+    df = pd.DataFrame(data, columns=["cell_type", "fraction"]).round(3)
+    print(df)
+
+
+def save_outcome(adata):
+    # save the processed data to temporary h5ad file, make relevant directory first
+    final_output_path = os.path.join(output_data_dir,  "annotated_" + os.path.basename(input_data_file).removeprefix("preprocessed_"))
+    adata.write(final_output_path, compression="gzip")
+
+    # foward the path to the temporary file to the executor script via stdout
+    print("Output: " + final_output_path)
+
+
+
+
+
+
 
 
 
 annotate_markers_z_score(adata, 0.8, -0.2) # second highest score has to be lower than 80% of highest to be sure, any score has to be at least above 0.2 stdevs below the mean for that score among all cells
+display_fractions(adata)
+save_outcome(adata)
 
 
-
-'''# debugging 
-# get global lowest, highest and average score for each cell type
-print("Global lowest, highest and average scores for each cell type")
-for cell_type, marker_list in MARKER_LISTS.items():
-    print(f"{cell_type}: lowest score: {np.min(adata.obs[cell_type + '_score'])}, highest score: {np.max(adata.obs[cell_type + '_score'])}, average score: {np.mean(adata.obs[cell_type + '_score'])}")
-'''
-
-# display global fraction of each cell type as dataframe
-data = []
-# go through your known marker-based cell types
-for cell_type, marker_list in MARKER_LISTS.items():
-    frac = np.sum(adata.obs["cell_type"] == cell_type) / adata.shape[0]
-    data.append((cell_type, frac))
-
-# add the "other" and "unsure" categories
-for special in ["other", "unsure"]:
-    frac = np.sum(adata.obs["cell_type"] == special) / adata.shape[0]
-    data.append((special, frac))
-
-# make DataFrame
-df = pd.DataFrame(data, columns=["cell_type", "fraction"]).round(3)
-
-'''# create a figure and axis
-fig, ax = plt.subplots(figsize=(5, 2))  # adjust size
-
-ax.axis('off')  # no axes
-
-
-# create table
-tbl = ax.table(cellText=df.values,
-               colLabels=df.columns,
-               cellLoc='center',
-               loc='center')
-
-tbl.auto_set_font_size(False)
-tbl.set_fontsize(8)
-tbl.scale(1, 2)  # scale width, height
-
-# set title
-plt.title(f"Global relative amounts of each cell type in{os.path.basename(input_data_file).removeprefix('preprocessed_')}", fontsize=12)
-
-# show
-plt.show()
-'''
-
-print(df)
-# -------------------------------------
-# Save
-#-------------------------------------
-
-# save the processed data to temporary h5ad file, make relevant directory first
-final_output_path = os.path.join(output_data_dir,  "annotated_" + os.path.basename(input_data_file).removeprefix("preprocessed_"))
-adata.write(final_output_path, compression="gzip")
-
-# foward the path to the temporary file to the executor script via stdout
-print("Output: " + final_output_path)
