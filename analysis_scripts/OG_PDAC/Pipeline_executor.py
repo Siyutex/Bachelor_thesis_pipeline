@@ -87,19 +87,24 @@ import json
 import os
 
 def execute_subprocess(subprocess_path: str, inputadata_path: str, output_dir_path: str,
-                       inputdatatype: str = None, python_objects: list = None) -> str:
+                       python_objects: list = None) -> str:
     """Run a Python subprocess, forward arguments and optional JSON objects, return output file path."""
 
-    args = ["python", "-u", subprocess_path, inputadata_path, output_dir_path, inputdatatype or "", str(len(python_objects or []))] # u means unbuffered mode -> directly print when print statement
 
     # Prepare stdin payload if needed
-    stdin_data = None
+    stdin_data = "" # must be empty string, so that it can be passed to subprocess. If it were None, then an error would occur
     if python_objects:
-        stdin_data = "\n".join(json.dumps(obj) for obj in python_objects) + "\n"
+        for object in python_objects:
+            print(f"Forwarding python object to subprocess: Object at index {python_objects.index(object)} of type {type(object)}: {python_objects[python_objects.index(object)]}")
+        stdin_data = "\n".join(json.dumps(obj) for obj in python_objects)
+
+    args = ["python", "-u", subprocess_path, inputadata_path, output_dir_path, stdin_data] # u means unbuffered mode -> directly print when print statement
+
 
     # Run subprocess, capture stdout + stderr
+    # in args: "python" and "-u" in args are swallowed by the function, everthing else is acutally passed to the subprocess
     proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
+    
     # Parse every line of stdout
     output_file_path = None
     for line in proc.stdout:
@@ -187,7 +192,7 @@ def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
     output_temp_dir = os.path.join(TEMP_DIR, "preprocessed")
 
     # assign datatype variable based on chosen pipeline mode
-    datatype = pipeline_mode.name
+    datatype = str(pipeline_mode.name)
 
     # run script on RAW_DATA_DIR based on chosen pipeline mode
     # define iterator for file naming + 1 for each file in element in raw_data_dir
@@ -197,7 +202,7 @@ def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
         # iterate over folders in raw data directory containing two tsv files and one mtx file each
         for folder in os.listdir(raw_data_dir):
             print("Currently preprocessing: " +  folder)
-            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_temp_dir, datatype)
+            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_temp_dir, [datatype])
             
             # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
             os.rename(temp_output_path, os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
@@ -214,7 +219,7 @@ def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
         # iterate over folder in raw data directory, then forward compressed files in them
         for folder in os.listdir(raw_data_dir):
             print("Currently preprocessing: " +  folder)
-            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_temp_dir, datatype)
+            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_temp_dir, [datatype])
 
             # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
             os.rename(temp_output_path, os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
@@ -231,7 +236,7 @@ def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
         # directly forward .matrix files in RAW_DATA_DIR
         for file in os.listdir(raw_data_dir):
             print("Currently preprocessing: " +  file)
-            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, file), output_temp_dir, datatype)
+            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, file), output_temp_dir, [datatype])
 
             # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
             os.rename(temp_output_path, os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
@@ -314,8 +319,33 @@ def prepare_for_pseudotime(input_data_dir: str):
     return None
 
 
-def infer_pseudotime(input_data_dir: str):
+
+def cluster_and_plot(input_data_dir: str, annotations: list = None, verbose: bool = False):
+    if annotations is None:
+        raise ValueError("annotations must be a list of strings")
+
+    script_path = os.path.join(SCRIPT_DIR, "Clustering.py")
+    script_name = os.path.basename(script_path).removesuffix(".py")
+
+    #check if OUTCOME_STORAGE_DIR and TEMP_DIR have relevant folder, if not create it
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, script_name), exist_ok=True)
+    os.makedirs(os.path.join(TEMP_DIR, script_name), exist_ok=True)
+
+    # assign directories for temporary and permanent storage
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, script_name)
+    output_temp_dir = os.path.join(TEMP_DIR, script_name)
+
+    # run script and assign path to temporary output file
+    print(f"Clustering and plotting: {input_data_dir}")
+    execute_subprocess(script_path, input_data_dir, output_temp_dir, [annotations, verbose])
+
+    # if specified, permanently store a copy of the temporary output file
+    if OUTCOME_STORAGE[script_name + ".py"] == True:
+        for file in os.listdir(output_temp_dir):
+            shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, os.path.basename(file)))
+
     return None
+
 
 
 def isolate_epithelial_cells():
@@ -375,7 +405,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         '''for raw_data_dir in RAW_DATA_DIRS:
             mode = choose_pipeline_mode(raw_data_dir)
             preprocess_data(mode, raw_data_dir)'''
-        annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
+        cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), ["cell_type"], verbose=True)
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
     except Exception:

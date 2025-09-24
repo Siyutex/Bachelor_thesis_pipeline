@@ -23,13 +23,21 @@ import tarfile # needed to extract compressed tar files
 import pandas as pd
 import numpy as np
 from scipy import sparse
+import json
 
 
 # import command line arguments from ececutor script
 input_data_path = sys.argv[1] if len(sys.argv) > 1 else print("Please provide the path to the raw data directory. It must contain mtx and tsv files from the 10x genomics pipeline") # can be a folder or a file, depending on the datatype
 output_data_path = sys.argv[2] if len(sys.argv) > 2 else print("Please provide the path to where the output should be saved")
-input_data_type = sys.argv[3] if len(sys.argv) > 3 else print("Please provide the data type. It must be one of the following: MTX_TSVs_in_subfolders, compressed_MTX_TSVs, dot_matrix_files") # string datatype variable to indicate which pipeline mode was chosen in the executor script
+python_objects = sys.argv[3] if len(sys.argv) > 3 else print("Please provide a list with python objects. For the preprocessing subprocess, this should contain the pipeline mode as a string")
 
+if len(python_objects) > 0:
+    python_objects = python_objects.split("\n")
+    for object in python_objects:
+        python_objects[python_objects.index(object)] = json.loads(object.strip())
+
+input_data_type = python_objects[0] # string datatype variable to indicate which pipeline mode was chosen in the executor script
+print(f"Input data type: {input_data_type}")
 
 # read data into adata, depending on input data type
 print("Reading data")
