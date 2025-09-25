@@ -8,6 +8,7 @@ import json # needed for forwarding python objects to subprocesses
 import shutil # needed for file storage operations
 import tempfile # needed for temporary file operations
 import sys # needed to exit the program
+import helper_functions as hf
 
 
 #check if the required directories exist, if not create them
@@ -79,55 +80,6 @@ def choose_pipeline_mode(raw_data_dir):
 
     print(f"Pipeline mode: {mode.name}")
     return mode
-
-
-# temporary comment: arguments will be: subprocess path, rawdata path, output path (not needed, bcs output is handled in executor), datatype, list of python objects to be forwarded, outcome storage dictionary (not needed, bcs handled per function that runs a subprocess)
-import subprocess
-import json
-import os
-
-def execute_subprocess(subprocess_path: str, inputadata_path: str, output_dir_path: str,
-                       python_objects: list = None) -> str:
-    """Run a Python subprocess, forward arguments and optional JSON objects, return output file path."""
-
-
-    # Prepare stdin payload if needed
-    stdin_data = "" # must be empty string, so that it can be passed to subprocess. If it were None, then an error would occur
-    if python_objects:
-        for object in python_objects:
-            print(f"Forwarding python object to subprocess: Object at index {python_objects.index(object)} of type {type(object)}: {python_objects[python_objects.index(object)]}")
-        stdin_data = "\n".join(json.dumps(obj) for obj in python_objects)
-
-    args = ["python", "-u", subprocess_path, inputadata_path, output_dir_path, stdin_data] # u means unbuffered mode -> directly print when print statement
-
-
-    # Run subprocess, capture stdout + stderr
-    # in args: "python" and "-u" in args are swallowed by the function, everthing else is acutally passed to the subprocess
-    proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    
-    # Parse every line of stdout
-    output_file_path = None
-    for line in proc.stdout:
-        if line.strip().startswith("Output: "):
-            output_file_path = line.split("Output:", 1)[1].strip()
-            print(f"execute_subprocess: received output: {output_file_path}")
-        else:
-            print(f"Subprocess {os.path.basename(subprocess_path)}: {line}")
-
-    # Wait for subprocess to finish and collect stderr
-    stdout, stderr = proc.communicate(input=stdin_data)
-
-    # if there was an error, raise RntimeError and print stderr
-    if proc.returncode != 0:
-        raise RuntimeError(f"Subprocess {os.path.basename(subprocess_path)} failed with exit code {proc.returncode}:\n{stderr}")
-
-    # if output file path was not printed to stdout by the subprocess, raise RuntimeError
-    if output_file_path is None:
-        raise RuntimeError(f"Output file path not found in subprocess {os.path.basename(subprocess_path)} stdout")
-
-    return output_file_path
-
-
 
 
 def purge_tempfiles(a=None, b=None): # a and b are needed for signal handler, but not used
@@ -202,7 +154,7 @@ def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
         # iterate over folders in raw data directory containing two tsv files and one mtx file each
         for folder in os.listdir(raw_data_dir):
             print("Currently preprocessing: " +  folder)
-            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_temp_dir, [datatype])
+            temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_temp_dir, [datatype])
             
             # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
             os.rename(temp_output_path, os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
@@ -219,7 +171,7 @@ def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
         # iterate over folder in raw data directory, then forward compressed files in them
         for folder in os.listdir(raw_data_dir):
             print("Currently preprocessing: " +  folder)
-            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_temp_dir, [datatype])
+            temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_temp_dir, [datatype])
 
             # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
             os.rename(temp_output_path, os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
@@ -236,7 +188,7 @@ def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
         # directly forward .matrix files in RAW_DATA_DIR
         for file in os.listdir(raw_data_dir):
             print("Currently preprocessing: " +  file)
-            temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, file), output_temp_dir, [datatype])
+            temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, file), output_temp_dir, [datatype])
 
             # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
             os.rename(temp_output_path, os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
@@ -266,7 +218,7 @@ def annotate_cell_types(input_data_dir: str):
     # run script on each file in input_data_dir
     for file in os.listdir(input_data_dir):
         print("Annotating cell types for: " + file)
-        temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Cell_type_annotation.py"), os.path.join(input_data_dir, file), output_temp_dir)
+        temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Cell_type_annotation.py"), os.path.join(input_data_dir, file), output_temp_dir)
 
         # if specified, permanently store a copy of the temporary output file
         if OUTCOME_STORAGE["Cell_type_annotation.py"] == True:
@@ -288,7 +240,7 @@ def correct_batch_effects(input_data_dir: str):
 
     # run script and assign path to temporary output file
     print(f"Correcting batch effects in {input_data_dir}")
-    temp_output_path = execute_subprocess(os.path.join(SCRIPT_DIR, "Batch_correction.py"), input_data_dir, output_temp_dir)
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Batch_correction.py"), input_data_dir, output_temp_dir)
 
     # if specified, permanently store a copy of the temporary output file
     if OUTCOME_STORAGE["Batch_correction.py"] == True:
@@ -309,7 +261,7 @@ def prepare_for_pseudotime(input_data_dir: str):
 
     # run script and assign path to temporary output file
     print(f"Prepping for pseudotime: {input_data_dir}")
-    execute_subprocess(script_path, input_data_dir, output_temp_dir)
+    hf.execute_subprocess(script_path, input_data_dir, output_temp_dir)
 
     # if specified, permanently store a copy of the temporary output file
     if OUTCOME_STORAGE[script_name + ".py"] == True:
@@ -337,7 +289,7 @@ def cluster_and_plot(input_data_dir: str, annotations: list = None, verbose: boo
 
     # run script and assign path to temporary output file
     print(f"Clustering and plotting: {input_data_dir}")
-    execute_subprocess(script_path, input_data_dir, output_temp_dir, [annotations, verbose])
+    hf.execute_subprocess(script_path, input_data_dir, output_temp_dir, [annotations, verbose])
 
     # if specified, permanently store a copy of the temporary output file
     if OUTCOME_STORAGE[script_name + ".py"] == True:
@@ -345,24 +297,6 @@ def cluster_and_plot(input_data_dir: str, annotations: list = None, verbose: boo
             shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, os.path.basename(file)))
 
     return None
-
-
-
-def isolate_epithelial_cells():
-    """Loops through the preprocessed h5ad files in temp/preprocessed and runs Epithelial_cell_isolation.py on each."""
-
-    # check if temp directory has epithelial_isolated folder, if not create it
-    if not os.path.exists(os.path.join(OUTPUT_STORAGE_DIR, "epithelial_isolated")):  # check if temp directory has epithelial_isolated folder
-        os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "epithelial_isolated"))  # create epithelial_isolated folder if it does not exist
-
-    for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed")):  # iterate over files in the temp directory where preprocessed files are stored
-        if file.endswith(".h5ad"): # check if the file is an h5ad file
-            (print("Currently isolating epithelial cells from: " + file))
-            file_path = os.path.join(OUTPUT_STORAGE_DIR, "preprocessed", file)
-            output_path = os.path.join(OUTPUT_STORAGE_DIR, "epithelial_isolated", f"epithelial_isolated_{file}") # save output in the temp directory with another new prefix
-            subprocess.run(["python", os.path.join(SCRIPT_DIR, "Epithelial_cell_isolation.py"), file_path, output_path], check=True) # check=True ensures that an error in the subprocess will raise an exception
-        else:
-            print(f"Epithelial_isolation: Skipping file {file} as it is not a .h5ad file.")
 
 
 def compute_variance():
@@ -402,9 +336,9 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
     # --- main loop ---
 
     try:
-        '''for raw_data_dir in RAW_DATA_DIRS:
+        for raw_data_dir in RAW_DATA_DIRS:
             mode = choose_pipeline_mode(raw_data_dir)
-            preprocess_data(mode, raw_data_dir)'''
+            preprocess_data(mode, raw_data_dir)
         cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), ["cell_type"], verbose=True)
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal

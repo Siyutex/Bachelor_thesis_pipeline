@@ -4,31 +4,14 @@
 # if one batch is passed, it will just cluster and plot, leiden and annotations 
 
 import os
-import sys
 import scanpy as sc
 import anndata
 import matplotlib.pyplot as plt
-import json
 import helper_functions as hf
 
-
-
-# import command line arguments from executor script
-input_data_file_or_dir = sys.argv[1] if len(sys.argv) > 1 else print("Please provide the path to the input file")
-output_data_dir = sys.argv[2] if len(sys.argv) > 2 else print("Please provide the path to the output directory")
-python_objects = sys.argv[3] if len(sys.argv) > 3 else print("Please provide a list with python objects. For the preprocessing subprocess, this should contain the pipeline mode as a string")
-
-# import annotation column names
-if len(python_objects) > 0:
-    python_objects = python_objects.split("\n")
-    for object in python_objects:
-        python_objects[python_objects.index(object)] = json.loads(object.strip())
-    annotation_columns = python_objects[0]
-    verbose = python_objects[1]
-
-vprint = hf.make_vprint(verbose=True)
-
-
+# import cmd args
+input_data_file_or_dir, output_data_dir, annotation_columns, verbose = hf.import_cmd_args(4)
+vprint = hf.make_vprint(verbose)
 
 def aggregate_batches(input_dir):
     """
