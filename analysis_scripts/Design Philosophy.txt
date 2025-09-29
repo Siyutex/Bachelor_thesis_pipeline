@@ -8,17 +8,15 @@ General design:
 	- try to avoid hardcoded strings as arguments (use variables / constants so it still matches if changed)
 	- pipeline executor files to run pipeline in modules
 	- pipeline executor handles conditionals and looping (eg differing folder structures), then have 
-	  different subprocesses for each condition, no conditionals in subprocesses.
+	  different subprocesses for each condition, minimal conditionals in subprocesses.
 	  The pipeline executor is the master brain, the subprocesses are just workers
 	  --> easier bugfixing
 	- subprocesses run on minimal dataset (eg one file or one tissue type, looping in executor)
-	- BUT: subprocesses should be able to handle different file types (for example)
-	  with the instruction on which one to do coming as an argument from the executor
-	  so it remains in charge of decision making
-	- data is parsed between executor and subprocesses as either a serialzed JSON object 
-	  or as a filepath to a resulting temporary file in /tmp 
+	- standardized filetype (.h5ad) for easier file passing between subprocesses
+	- data passed between executor and subprocess via execute_subprocess as paths or python objects
 	- temporary files can be permanently saved to a copy if specified
 	- all termporary files are automatically deleted after the pipeline finishes
+	- outsource commonly used functions to JL_helper_functions library
 
 
 Error Handling Philosophy for Thesis & Reusable Code

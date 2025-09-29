@@ -12,14 +12,13 @@ import re # needed to clean up file names
 from pympler import asizeof # needed for memory profiling
 import matplotlib.pyplot as plt
 import helper_functions as hf
+import anndata
+from typing import Tuple
 
-print("batch correction script initiated")
-# import command line arguments from ececutor script
-INPUT_DIR = sys.argv[1] if len(sys.argv) > 1 else print("Please provide the path to the input directory")
-OUTPUT_DIR = sys.argv[2] if len(sys.argv) > 2 else print("Please provide the path to the output directory")
 
+INPUT_DIR, OUTPUT_DIR = hf.import_cmd_args(2)
 # global constants
-IMPORT_PREFIX = "preprocessed" # "_" should be manually appended
+IMPORT_PREFIX = "annotated" # "_" should be manually appended
 
 
 # function to sort files numerically
@@ -34,7 +33,7 @@ def get_cancer_types(input_dir: str, verbose=False):
     Gets all cancer types present in the INPUT_DIR from file names.
 
     Iterates over all files in the given directory, checks if they are h5ad files and
-    removes the appended numbers, "_non_cancerous" or "_cancerous" suffixes, and the "preprocessed_" prefix
+    removes the appended numbers, "_non_cancerous" or "_cancerous" suffixes, and the IMPORT_PREFIX prefix
     to extract the cancer type from the filename. The result is a set of unique cancer types.
 
     Isolated cancer types will look like: "glioblastoma", "clear_cell_renal_carcinoma"
@@ -136,12 +135,11 @@ def aggregate_batches(cancer_type: str, max_obs_cancerous: int = None, max_obs_n
     if adata_list:
         adata = sc.concat(adata_list, merge="same", join="outer", index_unique="-X", fill_value=0) # join = outer so all genes are kept (not just the intersection of them)
     else:
-        adata = sc.AnnData()  # empty
-        print(f"No data for {cancer_type} found.")
+        raise ValueError(f"No batches found for cancer type {cancer_type} in {INPUT_DIR}")
 
     return adata
 
-def correct_batches(adata, max_considered_genes: int = None):
+def correct_batches_scVI(adata, max_considered_genes: int = 1000) -> Tuple[anndata.AnnData, scvi.model.SCVI]:
     """
     Correct batches using scVI. Adds a batch-corrected latent representation to `adata.obsm['X_scVI']`.
     Does internal normalization, so feed raw (filtered) counts.
@@ -150,17 +148,18 @@ def correct_batches(adata, max_considered_genes: int = None):
     ----------
     adata : anndata.AnnData
         Input data with batch information in `adata.obs['batch']`.
+    max_considered_genes : int, optional
+        Maximum number of highly variable genes to consider, by default 1000
 
     Returns
     -------
     adata : anndata.AnnData
-        Input data with batch-corrected latent representation in `adata.obsm['X_scVI']`.
+        Input data with batch-corrected latent representation in `adata.obsm['X_scVI']`
+    model : scvi.model.SCVI
+        The trained scVI model
     """
-
-
     
     # do batch aware HVG selection
-
     print("Selecting highly variable genes...")
     sc.pp.highly_variable_genes(
     adata,
@@ -206,149 +205,66 @@ def correct_batches(adata, max_considered_genes: int = None):
         model.save("my_scvi_model/", overwrite=True)
 
     # Get the batch-corrected latent representation (obsm is a matrix like X where each row is a cell and each column is a feature)
-    adata_hvg.obsm["X_scVI_latent"] = model.get_latent_representation()
     adata_hvg.obsm["X_scVI_corrected"] = model.get_normalized_expression()
     print(f"Shape of corrected expression matrix{adata_hvg.obsm["X_scVI_corrected"].shape}")
-    print(f"Shape of latent representation{adata_hvg.obsm['X_scVI_latent'].shape}")
 
-    return adata_hvg
+    return adata_hvg, model
 
 
-def plot_with_external_legend(adata, color, **kwargs):
+def correct_batches_scANVI(adata_hvg, pretrained_scVI_model) -> Tuple[anndata.AnnData, scvi.model.SCANVI]:
     """
-    Plots UMAP (or other Scanpy plots) with the legend outside the figure and smaller font.
-    Produces color.len() separate plots.
-    
-    Parameters
-    ----------
-    adata : AnnData
-        Your annotated data object.
-    color : str or list of str
-        Column name(s) in adata.obs to color by.
-    **kwargs : additional keyword arguments
-        Any additional arguments accepted by sc.pl.umap.
-    """
-    # Ensure color is a list for uniform handling
-    if isinstance(color, str):
-        color_keys = [color]
-    else:
-        color_keys = color
-
-    for key in color_keys:
-        sc.pl.umap(adata, color=key, show=False, **kwargs)
-        ax = plt.gca()
-        # Move legend outside and shrink font
-        ax.legend(
-            bbox_to_anchor=(1.05, 1),
-            loc='upper left',
-            fontsize='small',
-            title=key
-        )
-        plt.tight_layout()
-        plt.show()
-
-def plot_corrected_umap(adata):
-    # Use corrected representation for clustering/UMAP
-    """
-    Plot UMAP after batch correction.
+    Correct batches using scANVI. Adds a batch-corrected latent representation to `adata.obsm['X_scANVI']`.
+    Does internal normalization, so feed raw (filtered) counts.
 
     Parameters
     ----------
     adata : anndata.AnnData
-        Input data with batch information in `adata.obs['batch']` and
-        batch-corrected latent representation in `adata.obsm['X_scVI']`.
+        Input data with batch information in `adata.obs['batch']`.
+    pretrained_scVI_model : scvi.model.SCVI
+        Pretrained scVI model for transfer learning
 
     Returns
     -------
-    None
-
-    Notes
-    -----
-    This function creates a UMAP plot of the data in the corrected latent
-    space. The plot is colored by batch and cell type.
-    """
-    corrected_adata = adata.copy()
-    corrected_adata.X = corrected_adata.obsm["X_scVI_corrected"]
-
-    print("Clustering corrected data...")
-    print("Scaling...")
-    sc.pp.scale(corrected_adata, max_value=10)
-    print("PCA...")
-    sc.pp.pca(corrected_adata, svd_solver="arpack")
-    print("Neighbors...")
-    sc.pp.neighbors(corrected_adata)
-    print("Leiden clustering...")
-    sc.tl.leiden(corrected_adata)
-    print("UMAP...")
-    sc.tl.umap(corrected_adata)
-
-
-    # Plot to check batch correction
-    print("Plotting UMAP of corrected data...")
-    plot_with_external_legend(corrected_adata, color=["leiden", "batch","cancer_state"], title="UMAP of corrected data")
-
-
-def plot_uncorrected_umap(adata):
-    # Use corrected representation for clustering/UMAP
-    """
-    Plot UMAP of uncorrected data.
-
-    Parameters
-    ----------
     adata : anndata.AnnData
-        Input data with batch information in `adata.obs['batch']` and
-        batch-corrected latent representation in `adata.obsm['X_scVI']`.
-
-    Returns
-    -------
-    None
-
-    Notes
-    -----
-    This function creates a UMAP plot of the data in the corrected latent
-    space. The plot is colored by batch and cell type.
+        Input data with batch-corrected latent representation in `adata.obsm['X_scANVI']`
+    model : scvi.model.SCANVI
+        The trained scANVI model
     """
-    print("Clustering uncorrected data...")
 
-    print("Scaling...")
-    sc.pp.scale(adata, max_value=10)
-    print("PCA...")
-    sc.pp.pca(adata, svd_solver="arpack")
-    print("Neighbors...")
-    sc.pp.neighbors(adata)
-    print("Leiden clustering...")
-    sc.tl.leiden(adata)
-    print("UMAP...")
-    sc.tl.umap(adata)
+    try:
+        model = scvi.model.SCANVI.load("my_scanvi_model/", adata_hvg)
+    except Exception as e:
+        print("No scANVI model found. Training a new one...")
+        print(f"Model loading failed because of Exception: {e}")
+        model = None
+        pass
 
+    print(model) # check if model is loaded or none
 
-    # Plot to check batch correction
-    print("Plotting UMAP of uncorrected data...")
-    plot_with_external_legend(adata, color=["leiden", "batch","cancer_state"], title="UMAP of uncorrected data")
+    if model is None:
+        # set up model with batch information
+        scvi.model.SCANVI.setup_anndata(adata_hvg, batch_key="batch", labels_key="cell_type", unlabeled_category="unlabeled")
 
+        # Train the model
+        model = scvi.model.SCANVI.from_scvi_model(scvi_model=pretrained_scVI_model, adata=adata_hvg, labels_key="cell_type", unlabeled_category="unlabeled")
+        model.train()
+        model.save("my_scanvi_model/", overwrite=True)
 
-def get_correction_metrics():
-    return 0
-
+    # Get the batch-corrected latent representation (obsm is a matrix like X where each row is a cell and each column is a feature)
+    adata_hvg.obsm["X_scANVI_corrected"] = model.get_normalized_expression()
 
 
 # execute script
-cancertypes = get_cancer_types(INPUT_DIR)
+cancertypes = get_cancer_types(INPUT_DIR, verbose=True)
 for cancertype in cancertypes:
-    adata = aggregate_batches(cancertype, max_obs_cancerous=0, max_obs_non_cancerous=50000)
-    print(f"adata size in GB: {asizeof.asizeof(adata) / 1024**3}") # size of adata in GB
+    adata = aggregate_batches(cancertype, verbose=True)
 
-    adata_hvg = correct_batches(adata, 1000) 
+    adata_hvg, scvi_model = correct_batches_scVI(adata, 3000) 
+    corrected_adata = correct_batches_scANVI(adata_hvg, scvi_model)
 
-
-
-        # save the processed data to temporary h5ad file, make relevant directory first
+    # save the processed data to temporary h5ad file, make relevant directory first
     final_output_path = os.path.join(OUTPUT_DIR,f"batch_corrected_HVG_{cancertype}.h5ad")
     adata_hvg.write(final_output_path)
     print("Output: " + final_output_path)
-
-    # plot only after saving, so I don't change the matrix anymore (eg scaling will brick future PCAs)
-    # plot_corrected_umap(adata_hvg)
-    # plot_uncorrected_umap(adata_hvg)
 
 

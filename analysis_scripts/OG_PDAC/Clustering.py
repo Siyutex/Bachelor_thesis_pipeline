@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import helper_functions as hf
 
 # import cmd args
-input_data_file_or_dir, output_data_dir, annotation_columns, verbose = hf.import_cmd_args(4)
+input_data_file_or_dir, output_data_dir, annotation_columns, embedding, verbose = hf.import_cmd_args(5)
 vprint = hf.make_vprint(verbose)
 
 def aggregate_batches(input_dir):
@@ -58,7 +58,7 @@ def aggregate_batches(input_dir):
     return merged
 
 
-def plot_with_external_legend(adata, **kwargs):
+def plot_with_external_legend(adata, show=True, save=False, **kwargs):
     # Prevent Scanpy from immediately showing the plot
     fig, ax = plt.subplots(figsize=(6,6))  
     sc.pl.umap(adata, ax=ax,  show=False, **kwargs)
@@ -80,10 +80,8 @@ def plot_with_external_legend(adata, **kwargs):
     
     # Adjust layout to avoid clipping
     plt.tight_layout()
-    plt.show()
-
-
-
+    if show == True: plt.show()
+    if save == True: plt.savefig(os.path.join(output_data_dir, f"UMAP colored by {kwargs.get('color', '')} for {os.path.basename(input_data_file_or_dir).removesuffix('.h5ad')}.png"))
 
 
 # check if input is directory of file
@@ -95,8 +93,15 @@ else:
     vprint(f"Input is a file")
     adata = sc.read_h5ad(input_data_file_or_dir)
 
-vprint("normalizing data...")
-sc.pp.normalize_total(adata, target_sum=1e4)
+if embedding != None:
+    adata.X = adata.obsm[embedding].copy()
+
+
+if not hf.is_normalized(adata):
+    vprint("normalizing data...")
+    sc.pp.normalize_total(adata, target_sum=1e4)
+else:
+    print("Data already normalized, skipping to next step...")
 vprint("computing PCA embeddings...")
 sc.tl.pca(adata, svd_solver="arpack")
 vprint("finding neighbors...")
@@ -107,12 +112,13 @@ vprint("computing UMAP embeddings...")
 sc.tl.umap(adata)
 
 # plotting
-plot_with_external_legend(adata, color="leiden", title=f"UMAP colored by Leiden for {os.path.basename(input_data_file_or_dir)}")
+plot_with_external_legend(adata, show=False, save=True, color="leiden", title=f"UMAP colored by Leiden for {os.path.basename(input_data_file_or_dir)}")
 
 for annotation in annotation_columns:
-    plot_with_external_legend(adata, color=annotation, title=f"UMAP colored by {annotation} for {os.path.basename(input_data_file_or_dir)}")
+    plot_with_external_legend(adata, show=False, save=True, color=annotation, title=f"UMAP colored by {annotation} for {os.path.basename(input_data_file_or_dir)}")
 
-if os.path.isdir(input_data_file_or_dir):
-    plot_with_external_legend(adata, color="cancer_state", title=f"UMAP colored by cancer state for {os.path.basename(input_data_file_or_dir)}")
-    plot_with_external_legend(adata, color="batch", title=f"UMAP colored by batch for {os.path.basename(input_data_file_or_dir)}")
+if os.path.isdir(input_data_file_or_dir) or ("cancer_state" in adata.obs.columns and "batch" in adata.obs.columns):
+    plot_with_external_legend(adata, show=False, save=True, color="cancer_state", title=f"UMAP colored by cancer state for {os.path.basename(input_data_file_or_dir)}")
+    plot_with_external_legend(adata, show=False, save=True, color="batch", title=f"UMAP colored by batch for {os.path.basename(input_data_file_or_dir)}")
 
+print(f"Output: {output_data_dir}")

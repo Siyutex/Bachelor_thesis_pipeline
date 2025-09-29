@@ -38,10 +38,11 @@ TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage 
 # variable to determine what intermediate files should be saved permanently, one key per script
 OUTCOME_STORAGE = {
     "Preprocessing.py": True,
-    "prepare_for_pseudotime.py": False,
-    "Batch_correction.py": False,
     "Cell_type_annotation.py": True,
-    "Epithelial_cell_isolation.py": False,
+    "Clustering.py": True,
+    "Batch_correction.py": True,
+
+    "prepare_for_pseudotime.py": False,
     "Variance.py": False
 }
 
@@ -272,7 +273,7 @@ def prepare_for_pseudotime(input_data_dir: str):
 
 
 
-def cluster_and_plot(input_data_dir: str, annotations: list = None, verbose: bool = False):
+def cluster_and_plot(input_data_dir: str, annotations: list = None, embedding: str = None, verbose: bool = False):
     if annotations is None:
         raise ValueError("annotations must be a list of strings")
 
@@ -289,12 +290,12 @@ def cluster_and_plot(input_data_dir: str, annotations: list = None, verbose: boo
 
     # run script and assign path to temporary output file
     print(f"Clustering and plotting: {input_data_dir}")
-    hf.execute_subprocess(script_path, input_data_dir, output_temp_dir, [annotations, verbose])
+    hf.execute_subprocess(script_path, input_data_dir, output_temp_dir, [annotations, embedding, verbose])
 
     # if specified, permanently store a copy of the temporary output file
     if OUTCOME_STORAGE[script_name + ".py"] == True:
         for file in os.listdir(output_temp_dir):
-            shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, os.path.basename(file)))
+            shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, file))
 
     return None
 
@@ -336,10 +337,13 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
     # --- main loop ---
 
     try:
-        for raw_data_dir in RAW_DATA_DIRS:
+        '''for raw_data_dir in RAW_DATA_DIRS:
             mode = choose_pipeline_mode(raw_data_dir)
-            preprocess_data(mode, raw_data_dir)
-        cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), ["cell_type"], verbose=True)
+            preprocess_data(mode, raw_data_dir)'''
+
+        cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected","batch_corrected_HVG_PDAC.h5ad"), ["cell_type"], embedding="X_scANVI_corrected", verbose=True)
+
+        # cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), ["cell_type"], verbose=True)
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
     except Exception:

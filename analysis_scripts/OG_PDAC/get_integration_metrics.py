@@ -14,18 +14,18 @@ from scipy.stats import chisquare
 import helper_functions as hf
 
 # ---- Inputs ----
-DATA_INPUT = r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\debugging_tmps\test.h5ad"
+DATA_INPUT = r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\batch_corrected\batch_corrected_HVG_PDAC.h5ad"
 adata = sc.read_h5ad(DATA_INPUT)
 print(f"Loaded adata from {DATA_INPUT}")
 
 # ---- Constants ----
 # adata adjacent constants and keys
 BATCH_KEY = "batch" #in adata.obs[BATCH_KEY], per cell
-CONDITION_KEY = "cancer_state" # in adata.obs[CONDITION_KEY], per cell
-CORRECTED_MATRIX_KEY = "X_scVI_corrected" # in adata.obsm[CORRECTED_MATRIX_KEY], per integrated dataset
+CONDITION_KEY = "cell_type" # in adata.obs[CONDITION_KEY], per cell
+CORRECTED_MATRIX_KEY = "X_scANVI_corrected" # in adata.obsm[CORRECTED_MATRIX_KEY], per integrated dataset
 
 # script relevant constants
-N_REDUCED_DIMENSIONS = 10 # number of dimensions to reduce to (eg in PCA)
+N_REDUCED_DIMENSIONS = 50 # number of dimensions to reduce to (eg in PCA)
 NORMALIZATION_VALUE = 10000 # counts per cell to normalize to
 
 
@@ -111,14 +111,23 @@ assert CORRECTED_MATRIX_KEY in adata.obsm
 # ---- Preprocessing ----
 # Add a PCA embedding from raw counts for comparison, check normalization
 if not hf.is_normalized(adata):
+    print("Normalizing adata.X...")
     sc.pp.normalize_total(adata, target_sum=NORMALIZATION_VALUE)
-sc.pp.pca(adata, n_comps=N_REDUCED_DIMENSIONS) # 10 components so identical to scVI which has 10 latent dimensions
+else:
+    print("adata.X is already normalized, skipping to next step...")
+
+print("Computing PCA embedding for adata.X...")
+sc.pp.pca(adata, n_comps=N_REDUCED_DIMENSIONS) 
 
 # Also add a PCA embedding for the corrected data
 if CORRECTED_MATRIX_KEY in adata.obsm:
     adata.layers[CORRECTED_MATRIX_KEY] = adata.obsm[CORRECTED_MATRIX_KEY]
     if not hf.is_normalized(adata, layer=CORRECTED_MATRIX_KEY):
+        print(f"Normalizing adata.obsm[{CORRECTED_MATRIX_KEY}]...")
         sc.pp.normalize_total(adata, layer=CORRECTED_MATRIX_KEY, target_sum=NORMALIZATION_VALUE)
+    else:
+        print(f"adata.obsm[{CORRECTED_MATRIX_KEY}] is already normalized, skipping to next step...")
+    print(f"Computing PCA embedding for adata.obsm[{CORRECTED_MATRIX_KEY}]...")
     sc.pp.pca(adata, layer=CORRECTED_MATRIX_KEY, n_comps=N_REDUCED_DIMENSIONS, key_added=CORRECTED_MATRIX_KEY + "_pca")
 else:
     raise KeyError("No corrected expression matrix found for the chosen CORRECTED_MATRIX_KEY. Please provide one in adata.obsm[CORRECTED_MATRIX_KEY]")
