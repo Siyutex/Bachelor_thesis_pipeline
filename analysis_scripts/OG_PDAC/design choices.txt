@@ -16,3 +16,7 @@ Marker_isolation:
 - cell type assignment:
 	- cutoff unsure: if second highest ranked marker set is >cutoff*highest, then the cell type might also be the second highest ranked one
 	- cutoff other: cells with low expressions on all marker sets are likely in a different category
+
+GRN_inference:
+!!IMPORTANT!! in arboreto version 0.1.6 there is an issue in core.create_graph: "from_delayed" triggers twice, so comment out / make conditional the second trigger manually
+if this is not done, then the second run will produce no delayed objects and the dask graph cannot be computed -> inference will throw an error

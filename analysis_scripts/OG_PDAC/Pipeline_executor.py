@@ -41,6 +41,7 @@ OUTCOME_STORAGE = {
     "Cell_type_annotation.py": True,
     "Clustering.py": True,
     "Batch_correction.py": True,
+    "GRN_inference.py": True,
 
     "prepare_for_pseudotime.py": False,
     "Variance.py": False
@@ -275,7 +276,7 @@ def prepare_for_pseudotime(input_data_dir: str):
 
 def cluster_and_plot(input_data_dir: str, annotations: list = None, embedding: str = None, verbose: bool = False):
     if annotations is None:
-        raise ValueError("annotations must be a list of strings")
+        raise ValueError("annotations must be a list of strings describing adata.obs[...] column names")
 
     script_path = os.path.join(SCRIPT_DIR, "Clustering.py")
     script_name = os.path.basename(script_path).removesuffix(".py")
@@ -298,6 +299,28 @@ def cluster_and_plot(input_data_dir: str, annotations: list = None, embedding: s
             shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, file))
 
     return None
+
+
+def infer_GRN(input_data_dir: str, verbose: bool = False):
+    """ 
+    Infer a GRN (csv, regulators + importance) from a given aggregated / batch corrected h5ad file.
+    """
+
+    #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "GRN"), exist_ok=True)
+    os.makedirs(os.path.join(TEMP_DIR, "GRN"), exist_ok=True)
+
+    # assign directories for temporary and permanent storage
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "GRN")
+    output_temp_dir = os.path.join(TEMP_DIR, "GRN")
+
+    # run script and assign path to temporary output file
+    print(f"Inferring GRN from {input_data_dir}")
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "GRN_inference.py"), input_data_dir, output_temp_dir, [verbose])
+
+    # if specified, permanently store a copy of the temporary output file
+    if OUTCOME_STORAGE["GRN_inference.py"] == True:
+        shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
 
 def compute_variance():
@@ -340,10 +363,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         '''for raw_data_dir in RAW_DATA_DIRS:
             mode = choose_pipeline_mode(raw_data_dir)
             preprocess_data(mode, raw_data_dir)'''
-
-        cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected","batch_corrected_HVG_PDAC.h5ad"), ["cell_type"], embedding="X_scANVI_corrected", verbose=True)
-
-        # cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), ["cell_type"], verbose=True)
+        for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR,"batch_corrected")):
+            infer_GRN(os.path.join(OUTPUT_STORAGE_DIR,"batch_corrected",file), verbose=True)
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
     except Exception:
