@@ -41,7 +41,7 @@ OUTCOME_STORAGE = {
     "Cell_type_annotation.py": True,
     "Clustering.py": True,
     "Batch_correction.py": True,
-    "GRN_inference.py": True,
+    "GRN_edge_inference.py": True,
 
     "prepare_for_pseudotime.py": False,
     "Variance.py": False
@@ -301,9 +301,9 @@ def cluster_and_plot(input_data_dir: str, annotations: list = None, embedding: s
     return None
 
 
-def infer_GRN(input_data_dir: str, verbose: bool = False):
+def infer_GRN_edges(input_data_dir: str, verbose: bool = False):
     """ 
-    Infer a GRN (csv, regulators + importance) from a given aggregated / batch corrected h5ad file.
+    Infer the edges of a GRN (csv, regulators + importance) from a given aggregated / batch corrected h5ad file.
     """
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
@@ -316,10 +316,10 @@ def infer_GRN(input_data_dir: str, verbose: bool = False):
 
     # run script and assign path to temporary output file
     print(f"Inferring GRN from {input_data_dir}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "GRN_inference.py"), input_data_dir, output_temp_dir, [verbose])
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "GRN_edge_inference.py"), input_data_dir, output_temp_dir, [verbose])
 
     # if specified, permanently store a copy of the temporary output file
-    if OUTCOME_STORAGE["GRN_inference.py"] == True:
+    if OUTCOME_STORAGE["GRN_edge_inference.py"] == True:
         shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
 
@@ -364,7 +364,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             mode = choose_pipeline_mode(raw_data_dir)
             preprocess_data(mode, raw_data_dir)'''
         for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR,"batch_corrected")):
-            infer_GRN(os.path.join(OUTPUT_STORAGE_DIR,"batch_corrected",file), verbose=True)
+            infer_GRN_edges(os.path.join(OUTPUT_STORAGE_DIR,"batch_corrected",file), verbose=True)
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
     except Exception:

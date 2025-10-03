@@ -1,0 +1,3 @@
+GRN_edge_inference:
+    + weird edges like MMP9 -> PENK are captured: try bootstrapping with ~50% of cells and  
+      only keep edges occuring often
