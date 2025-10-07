@@ -241,11 +241,11 @@ for target, edge_set in edge_sets.items():
         bnet_rule = pyeda_to_bnet(simplified_rule, target=target)
         bnet_rules.append(bnet_rule)
 
-# export all rules to json
-with open(os.path.join(output_data_dir,f"Boolean_rules_{os.path.basename(expression_matrix_file).removeprefix(PREFIX).removesuffix(SUFFIX)}.json"), "w") as f:
-    json.dump(bnet_rules, f)
+# export all rules to to txt as BNET format
+with open(os.path.join(output_data_dir, f"Boolean_rules_{os.path.basename(expression_matrix_file).removeprefix(PREFIX).removesuffix(SUFFIX)}.txt"), "w") as f:
+    f.write("\n".join(bnet_rules))
 
-print("Output: " + os.path.join(output_data_dir, f"Boolean_rules_{os.path.basename(expression_matrix_file).removeprefix(PREFIX).removesuffix(SUFFIX)}.json"))
+print("Output: " + os.path.join(output_data_dir, f"Boolean_rules_{os.path.basename(expression_matrix_file).removeprefix(PREFIX).removesuffix(SUFFIX)}.txt"))
 
     
 

@@ -25,7 +25,7 @@ from distributed import Client, LocalCluster
 import json
 
 # get cmd args
-input_data_file, output_data_dir, verbose = hf.import_cmd_args(3)
+input_data_file, output_data_dir, verbose, n_nodes = hf.import_cmd_args(3)
 vprint = hf.make_vprint(verbose)
 
 
@@ -140,6 +140,13 @@ if __name__ == "__main__":
     vprint("Isolating ductal cells...")
     ductal_cells = adata.obs["cell_type"] == "ductal_cell"
     adata = adata[ductal_cells, :]
+
+    # if n_nodes is not None, subsample data
+    if n_nodes is not None:
+        vprint(f"Limiting GRN scope to {n_nodes} nodes...")
+        rng = np.random.default_rng()
+        idx = rng.choice(adata.X.shape[0], size=n_nodes, replace=False, shuffle=False)
+        adata = adata[:, idx]
 
     tracker = StabilityTracker(tol=0.05, top_n=5)
     while tracker.converged == False:

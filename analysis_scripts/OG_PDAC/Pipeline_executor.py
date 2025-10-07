@@ -43,6 +43,7 @@ OUTCOME_STORAGE = {
     "Batch_correction.py": True,
     "GRN_edge_inference.py": True,
     "GRN_rule_inference.py": True,
+    "GRN_simulation": True,
 
     "prepare_for_pseudotime.py": False,
     "Variance.py": False
@@ -302,10 +303,12 @@ def cluster_and_plot(input_data_dir: str, annotations: list = None, embedding: s
     return None
 
 
-def infer_GRN_edges(input_data_dir: str, verbose: bool = False):
+def infer_GRN_edges(input_data_file: str, n_nodes = None, verbose: bool = False):
     """ 
-    Infer the edges of a GRN) from a given aggregated / batch corrected h5ad file.
+    Infer the edges of a GRN from a given aggregated / batch corrected h5ad file.
     Outputs a JSON with inferred edges for each target gene as list.
+    Set n_nodes to limit the number of nodes in the output GRN, by default, all
+    genes are used.
     """
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
@@ -317,15 +320,15 @@ def infer_GRN_edges(input_data_dir: str, verbose: bool = False):
     output_temp_dir = os.path.join(TEMP_DIR, "GRN_edges")
 
     # run script and assign path to temporary output file
-    print(f"Inferring GRN from {input_data_dir}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "GRN_edge_inference.py"), input_data_dir, output_temp_dir, [verbose])
+    print(f"Inferring GRN from {input_data_file}")
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "GRN_edge_inference.py"), input_data_file, output_temp_dir, [verbose, n_nodes])
 
     # if specified, permanently store a copy of the temporary output file
     if OUTCOME_STORAGE["GRN_edge_inference.py"] == True:
         shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
 
-def infer_GRN_rules(input_data_dir: str, edge_set_file: str, verbose: bool = False):
+def infer_GRN_rules(input_data_file: str, edge_set_file: str, verbose: bool = False):
     """ 
     Infer the rules of a GRN from a given aggregated / batch corrected h5ad file
     and a JSON with inferred edges for each target gene. Outputs a JSON with inferred rule
@@ -341,11 +344,34 @@ def infer_GRN_rules(input_data_dir: str, edge_set_file: str, verbose: bool = Fal
     output_temp_dir = os.path.join(TEMP_DIR, "GRN_rules")
 
     # run script and assign path to temporary output file
-    print(f"Inferring GRN from {input_data_dir}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "GRN_rule_inference.py"), input_data_dir, output_temp_dir, [verbose, edge_set_file])
+    print(f"Inferring GRN from {input_data_file}")
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "GRN_rule_inference.py"), input_data_file, output_temp_dir, [verbose, edge_set_file])
 
     # if specified, permanently store a copy of the temporary output file
     if OUTCOME_STORAGE["GRN_rule_inference.py"] == True:
+        shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
+
+
+def simulate_GRN(input_data_file: str, verbose: bool = False):
+    """ 
+    Simulate an existing GRN and do a modular analysis thereof. Input is a txt with
+    a lost of boolean rules in BNET format. 
+    """
+
+    #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "GRN_analysis"), exist_ok=True)
+    os.makedirs(os.path.join(TEMP_DIR, "GRN_analysis"), exist_ok=True)
+
+    # assign directories for temporary and permanent storage
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "GRN_analysis")
+    output_temp_dir = os.path.join(TEMP_DIR, "GRN_analysis")
+
+    # run script and assign path to temporary output file
+    print(f"Inferring GRN from {input_data_file}")
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "GRN_simulation.py"), input_data_file, output_temp_dir, [verbose])
+
+    # if specified, permanently store a copy of the temporary output file
+    if OUTCOME_STORAGE["GRN_simulation.py"] == True:
         shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
 
@@ -389,15 +415,13 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         '''for raw_data_dir in RAW_DATA_DIRS:
             mode = choose_pipeline_mode(raw_data_dir)
             preprocess_data(mode, raw_data_dir)'''
-        for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR,"batch_corrected")):
-            infer_GRN_rules(os.path.join(OUTPUT_STORAGE_DIR,"batch_corrected",file),os.path.join(OUTPUT_STORAGE_DIR,"GRN","stable_edges_PDAC_chosenbymean.json") , verbose=True)
+        # infer_GRN_edges(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_HVG_PDAC.h5ad"), verbose=True, n_nodes=100)
+        # for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "GRN_edges")):
+        #     infer_GRN_rules(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_HVG_PDAC.h5ad"), verbose=True, edge_set_file=os.path.join(OUTPUT_STORAGE_DIR, "GRN_edges", file))
+        simulate_GRN(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\GRN_rules\Boolean_rules_PDAC.txt")
+        #simulate_GRN(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\GRN_rules\Boolean_rules_PDAC_full.txt")
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
     except Exception:
         purge_tempfiles()
         raise # re-raise the exception to see the traceback and error message
-    
-
-
-
-
