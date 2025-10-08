@@ -43,7 +43,7 @@ OUTCOME_STORAGE = {
     "Batch_correction.py": True,
     "GRN_edge_inference.py": True,
     "GRN_rule_inference.py": True,
-    "GRN_simulation": True,
+    "GRN_simulation.py": False,
 
     "prepare_for_pseudotime.py": False,
     "Variance.py": False
@@ -418,8 +418,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # infer_GRN_edges(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_HVG_PDAC.h5ad"), verbose=True, n_nodes=100)
         # for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "GRN_edges")):
         #     infer_GRN_rules(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_HVG_PDAC.h5ad"), verbose=True, edge_set_file=os.path.join(OUTPUT_STORAGE_DIR, "GRN_edges", file))
-        simulate_GRN(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\GRN_rules\Boolean_rules_PDAC.txt")
-        #simulate_GRN(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\GRN_rules\Boolean_rules_PDAC_full.txt")
+        simulate_GRN(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\GRN_rules\Boolean_rules_PDAC.txt", verbose=True)
+        
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
     except Exception:

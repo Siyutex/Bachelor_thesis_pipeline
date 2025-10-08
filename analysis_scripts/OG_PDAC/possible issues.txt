@@ -1,13 +1,13 @@
 GRN_edge_inference:
-  + weird edges like MMP9 -> PENK are captured: try bootstrapping with ~50% of cells and  
-    only keep edges occuring often
+  - weird edges like MMP9 -> PENK are captured: use bootstrapping (may need to use cluster for this)
   - we always keep top 5 edges per node atm, but some might have more than 5 relevant ones, others 
     less (maybe introduce a cutoff in importance for top n selection)
-  - maybe also use random forest classifier in combination with grnboost2 (check what it does under
-    the hood) to make edge selection more robust
+  - might need to use pseudotime based inference to get good edges
 GRN_rule_inference:
   - possible issues at https://scikit-learn.org/stable/modules/tree.html#tree (eg overfitting bsc lacks pruning)
   - if 1 or 0 overweighs for the state of a gene in a dataset (or subset of 1 pseudotime epoch) then gini impurity and entropy 
     will not be good predictors for splits (gini worse than entropy). BUT, since I only work
     on HVGs, it would be reasonable to assume that the class (1 or 0) distribution is somewhat
     even in target (really in all) genes. 
+Cell_type_annotation:
+  - might not be very accurate (eg neurons included in epithelial), check by clustering epi isolated
