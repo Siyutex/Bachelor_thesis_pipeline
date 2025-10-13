@@ -43,7 +43,7 @@ print(f"Input data type: {input_data_type}")
 print("Reading data")
 if input_data_type == "MTX_TSVs_in_subfolders":
     # read mtx file, and tsv files from the current folder in the raw_data directory
-    adata = sc.read_10x_mtx(input_data_path)  
+    adata = sc.read_10x_mtx(input_data_path, var_names="gene_ids")  # use gene ids at var names to avoid conflicts later (they are unqiue, gene names occur multiple times, eg in pseudogenes)
 elif input_data_type == "compressed_MTX_TSVs_in_subfolders":
     # extract compressed files to a temporary directory and read them from there
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -52,11 +52,12 @@ elif input_data_type == "compressed_MTX_TSVs_in_subfolders":
                 file_path = os.path.join(input_data_path, file)
                 with tarfile.open(file_path, "r:gz") as tar:
                     tar.extractall(path=temp_dir)
-        adata = sc.read_10x_mtx(os.path.join(temp_dir, os.listdir(temp_dir)[0]))
-elif input_data_type == "dot_matrix_files":
+        adata = sc.read_10x_mtx(os.path.join(temp_dir, os.listdir(temp_dir)[0]), var_names="gene_ids")
+"""elif input_data_type == "dot_matrix_files":
     # directly read the forwarded .matrix file = raw_data
-    temp_df = pd.read_csv(input_data_path, sep="\t", index_col=0) # rows are genes, columns are cells, need to transpose to fit with annData format
-    adata = sc.AnnData(temp_df.T) # transpose the dataframe to have cells as rows and genes as columns
+    temp_df = pd.read_csv(input_data_path, sep="\t", index_col=0) # rows are genes, columns are cells, need to transpose to fit with annData format (no information on ensembl ids for this file type, so we must use gene names)
+    adata = sc.AnnData(temp_df.T) # transpose the dataframe to have cells as rows and genes as columns""" # does not work anymore because downstream processing relies on ensembl ids in varnames and this file type does not have them
+
 
 # standardize adata to use scipy sparse matrix for X, or getnnz will not work
 if type(adata.X) != sparse.csc_matrix:
@@ -77,7 +78,7 @@ adata.obs['n_counts'] = np.array(adata.X.sum(axis=1)).flatten() # add all umi co
 adata = adata[adata.obs['n_counts'] > int(np.percentile(adata.obs['n_counts'], 10)), :]  # keep cells with more UMI counts than the 10th percentile
 
 print("removing cells with high mitochondrial gene expression")
-adata.var["mito"] = adata.var_names.str.startswith("MT-")  # identify mitochondrial genes, assuming they start with "MT-"
+adata.var["mito"] = adata.var["gene_symbols"].str.startswith("MT-")  # identify mitochondrial genes, assuming they start with "MT-"
 adata.obs["pct_counts_mito"] = adata.X[:, adata.var["mito"].values].sum(axis=1) / adata.X.sum(axis=1)
 mito_cutoff = np.median(adata.obs['pct_counts_mito']) + np.median(np.abs(adata.obs['pct_counts_mito'] - np.median(adata.obs['pct_counts_mito']))) # median + MAD
 adata = adata[adata.obs['pct_counts_mito'] < mito_cutoff, :]
@@ -89,6 +90,7 @@ adata = adata[~adata.obs['predicted_doublet']] # ~ is a bitwise NOT operator, so
 
 # print to console how many cells and genes are left after preprocessing
 print(f"{adata.shape[0]} cells and {adata.shape[1]} genes left after preprocessing")
+print(f"Anndata var columns: {adata.var.columns}")
 
 
 # save the processed data to temporary h5ad file, make relevant directory first

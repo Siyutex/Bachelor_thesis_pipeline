@@ -59,16 +59,14 @@ def annotate_markers_z_score(adata, cutoff_unsure, cutoff_other): # cutoff is a 
     sc.pp.normalize_total(internal_adata, target_sum= 1e4)
     
     # get z scores for each gene
-    print(f"adata shape {internal_adata.shape}")
     X = np.array(internal_adata.X.todense())  # cells x genes, dense ndarray
-    print(type(X))
     mu = X.mean(axis=0)
     sigma = X.std(axis=0)
     internal_adata.X = sparse.csc_matrix((X-mu)/sigma)
 
     # get putative cell annotation scores (>0 means it likely is that cell type, <0 means it likely is not)
     for celltype, marker_list in MARKER_LISTS.items():
-        marker_levels = internal_adata[:, internal_adata.var_names.isin(marker_list)]
+        marker_levels = internal_adata[:, internal_adata.var["gene_symbols"].isin(marker_list)]
         marker_levels = np.array(marker_levels.X.todense())
 
         # check if array is not empty (if it is empty that means that there is no overlap between

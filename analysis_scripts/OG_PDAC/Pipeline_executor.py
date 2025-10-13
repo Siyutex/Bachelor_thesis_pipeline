@@ -27,9 +27,9 @@ if not os.path.exists(os.path.join(tempfile.gettempdir(),"python")):
 # path constants
 SCRIPT_DIR = os.path.dirname(__file__)  # directory where this script is located
 # list of directories (see choose_pipeline_mode for valid structures for each entry)
-RAW_DATA_DIRS = [
-                os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining", "cancerSCEM", "colon_cancer_cancerous"),    
+RAW_DATA_DIRS = [    
                 os.path.join(SCRIPT_DIR, "..", "..", "Data","OG_data","NCBI","PDAC_cancerous"),
+                os.path.join(SCRIPT_DIR, "..", "..", "Data","OG_data","NCBI","PDAC_non_cancerous"),
                 ]
 OUTPUT_STORAGE_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data", "output_storage")  # directory for optional permanent storage of indermediate subprocess outputs
 TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage of temporary pipeline files
@@ -39,11 +39,12 @@ TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage 
 OUTCOME_STORAGE = {
     "Preprocessing.py": True,
     "Cell_type_annotation.py": True,
-    "Clustering.py": True,
+    "Clustering.py": False,
     "Batch_correction.py": True,
-    "GRN_edge_inference.py": True,
-    "GRN_rule_inference.py": True,
+    "GRN_edge_inference.py": False,
+    "GRN_rule_inference.py": False,
     "GRN_simulation.py": False,
+    "infer_CNV.py": True,
 
     "prepare_for_pseudotime.py": False,
     "Variance.py": False
@@ -251,6 +252,32 @@ def correct_batch_effects(input_data_dir: str):
         shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
 
+def infer_CNVs(input_data_file: str, reference_genome_path: str, corrected_representation: str = None, verbose: bool = False):
+    """ 
+    Infer copy number variations from a given aggregated / batch corrected h5ad file.
+    Requires to specify a reference genome, e.g. hg38 to map ensembl IDs (should be adata.var_names)
+    to chromosomal coordinates. The reference genome should be in gtf format (gz compression is supported).
+    Optionally pass a corrected representation in adata.ombsm (e.g. "X_scVI" or "X_scANVI").
+    If not specified, the raw representation is used.
+    """
+
+    #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "CNV"), exist_ok=True)
+    os.makedirs(os.path.join(TEMP_DIR, "CNV"), exist_ok=True)
+
+    # assign directories for temporary and permanent storage
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "CNV")
+    output_temp_dir = os.path.join(TEMP_DIR, "CNV")
+
+    # run script and assign path to temporary output file
+    print(f"Inferring GRN from {input_data_file}")
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "infer_CNV.py"), input_data_file, output_temp_dir, [reference_genome_path, corrected_representation, verbose])
+
+    # if specified, permanently store a copy of the temporary output file
+    if OUTCOME_STORAGE["infer_CNV.py"] == True:
+        shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
+
+
 def prepare_for_pseudotime(input_data_dir: str):
     script_path = os.path.join(SCRIPT_DIR, "prepare_for_pseudotime.py")
     script_name = os.path.basename(script_path).removesuffix(".py")
@@ -412,14 +439,12 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
     # --- main loop ---
 
     try:
-        '''for raw_data_dir in RAW_DATA_DIRS:
+        """for raw_data_dir in RAW_DATA_DIRS:
             mode = choose_pipeline_mode(raw_data_dir)
-            preprocess_data(mode, raw_data_dir)'''
-        # infer_GRN_edges(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_HVG_PDAC.h5ad"), verbose=True, n_nodes=100)
-        # for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "GRN_edges")):
-        #     infer_GRN_rules(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_HVG_PDAC.h5ad"), verbose=True, edge_set_file=os.path.join(OUTPUT_STORAGE_DIR, "GRN_edges", file))
-        simulate_GRN(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\GRN_rules\Boolean_rules_PDAC.txt", verbose=True)
-        
+            preprocess_data(mode, raw_data_dir)"""
+        # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
+        # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"))
+        infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected","batch_corrected_HVG_PDAC.h5ad"), reference_genome_path=r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", corrected_representation="X_scANVI_corrected",verbose=True)        
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
     except Exception:

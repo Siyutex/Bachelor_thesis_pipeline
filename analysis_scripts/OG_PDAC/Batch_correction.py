@@ -4,6 +4,8 @@
 # all of this will happen directly in gene expression space
 # The results can also be plotted
 
+# assumes ensebl ids as adata.var_names and gene symbols in adata.var.["gene_symbols"]
+
 import os
 import sys
 import scanpy as sc
@@ -123,19 +125,80 @@ def aggregate_batches(cancer_type: str, max_obs_cancerous: int = None, max_obs_n
         new_adata.obs["batch"] = batch_names[i] # assign batch label to each cell in new_adata
         new_adata.obs["cancer_state"] = state # assign cancer state to each cell in new_adata
 
-
         adata_list.append(new_adata)
         if state == "cancerous":
             cancerous_obs += new_adata.n_obs
         else:
             non_cancerous_obs += new_adata.n_obs
 
+    # check if ensembl ids map to unqiue gene symbols (needed to ensure that gene symbols are reattached correctly after concatenation)
+    vprint("Checking if mapping ensebl id -> gene symbol is unqiue across all batches...")
+    ensembl_ids = set()
+    for adata in adata_list:
+        ensembl_ids.update(adata.var_names)
+
+    unique_tracker = []
+    for ensemb_id in list(ensembl_ids):
+        gene_symbols = []
+        for adata in adata_list:  
+            if ensemb_id in adata.var_names:
+                gene_symbols.append(adata.var["gene_symbols"][ensemb_id])
+        unique_gene_symbols = set(gene_symbols)
+        if len(unique_gene_symbols) > 1:
+            vprint(f"Ensembl id {ensemb_id} has more than one unqiue gene symbol associated with it across batches: {gene_symbols}")
+            unique_tracker.append(False)
+        else:
+            unique_tracker.append(True)
+
+    if len(unique_tracker) == len(ensembl_ids) and False not in unique_tracker:
+        vprint("All ensembl ids across all batches correspond to exactly one gene symbol across all batches")
+        vprint("Merging adata objects is possible, continuing to merger...")
+    elif len(unique_tracker) == len(ensembl_ids) and False in unique_tracker:
+        raise ValueError("There are enseml ids which correspond to more than one gene symbol across batches, cannot merge anndata objects")
+    assert len(unique_tracker) == len(ensembl_ids), "Logic error: tracker length mismatch"
+
+    # DEBUGGING
+    for adata in adata_list:
+        ensemb_id_list = list(adata.var_names)
+        ensemb_id_set = set(ensemb_id_list)
+
+        len_diff = abs(len(ensemb_id_set) - len(ensemb_id_list))
+        assert len_diff == 0, f"Ensembl id list has {len_diff} duplicate entries"
+        print(len_diff)
+    #----------
+
+
     # concatenate once at the end
-    print("Conatenating batches...")
+    print("Concatenating batches...")
     if adata_list:
-        adata = sc.concat(adata_list, merge="same", join="outer", index_unique="-X", fill_value=0) # join = outer so all genes are kept (not just the intersection of them)
+        adata = sc.concat(adata_list, merge="same", join="outer", index_unique="-X", fill_value=0) # join = outer so all genes are kept (not just the intersection of them), merge = same does not work but we remediate this afterwards by reattaching important var columns
     else:
         raise ValueError(f"No batches found for cancer type {cancer_type} in {INPUT_DIR}")
+
+    # reattach adata.var["gene_symbol"] to aggregated adata (the concant function cannot handle it properly)
+    mapping = {}
+    for ad in adata_list:
+        mapping.update(ad.var["gene_symbols"].to_dict())  # add key values pairs: "ensemb_id" : "gene_symbol"
+    adata.var["gene_symbols"] = adata.var_names.map(mapping)
+
+    # DEBUGGING
+    ensemb_id_list = list(adata.var_names)
+    ensemb_id_set = set(ensemb_id_list)
+
+    len_diff = abs(len(ensemb_id_set) - len(ensemb_id_list))
+    assert len_diff == 0, f"Ensembl id list has {len_diff} duplicate entries"
+    print("Len diff after aggregation: ", len_diff)
+
+    # test again
+
+    adata_dup = adata.var_names.value_counts()
+    adata_dup = adata_dup[adata_dup > 1]
+
+    if not adata_dup.empty:
+        print("Duplicate genes in AnnData:")
+        for gene, count in adata_dup.items():
+            print(f"  {gene}: {count} entries")
+    #----------
 
     return adata
 
@@ -253,6 +316,8 @@ def correct_batches_scANVI(adata_hvg, pretrained_scVI_model) -> Tuple[anndata.An
     # Get the batch-corrected latent representation (obsm is a matrix like X where each row is a cell and each column is a feature)
     adata_hvg.obsm["X_scANVI_corrected"] = model.get_normalized_expression()
 
+    return adata_hvg, model
+
 
 # execute script
 cancertypes = get_cancer_types(INPUT_DIR, verbose=True)
@@ -260,11 +325,11 @@ for cancertype in cancertypes:
     adata = aggregate_batches(cancertype, verbose=True)
 
     adata_hvg, scvi_model = correct_batches_scVI(adata, 3000) 
-    corrected_adata = correct_batches_scANVI(adata_hvg, scvi_model)
+    corrected_adata, scanvi_model = correct_batches_scANVI(adata_hvg, scvi_model)
 
     # save the processed data to temporary h5ad file, make relevant directory first
     final_output_path = os.path.join(OUTPUT_DIR,f"batch_corrected_HVG_{cancertype}.h5ad")
-    adata_hvg.write(final_output_path)
+    corrected_adata.write(final_output_path)
     print("Output: " + final_output_path)
 
 
