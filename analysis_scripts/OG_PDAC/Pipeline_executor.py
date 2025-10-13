@@ -45,6 +45,7 @@ OUTCOME_STORAGE = {
     "GRN_rule_inference.py": False,
     "GRN_simulation.py": False,
     "infer_CNV.py": True,
+    "pseudotime_inference.py": True,
 
     "prepare_for_pseudotime.py": False,
     "Variance.py": False
@@ -302,6 +303,28 @@ def prepare_for_pseudotime(input_data_dir: str):
     return None
 
 
+def infer_pseudotime(input_data_file: str, verbose: bool = False):
+    """ 
+    Infer pseudotime from a given aggregated / batch corrected h5ad file.
+    Adds adata.obs["dpt_pseudotime"]
+    """
+
+    #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "pseudotime"), exist_ok=True)
+    os.makedirs(os.path.join(TEMP_DIR, "pseudotime"), exist_ok=True)
+
+    # assign directories for temporary and permanent storage
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "pseudotime")
+    output_temp_dir = os.path.join(TEMP_DIR, "pseudotime")
+
+    # run script and assign path to temporary output file
+    print(f"Inferring GRN from {input_data_file}")
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "pseudotime_inference.py"), input_data_file, output_temp_dir, [verbose])
+
+    # if specified, permanently store a copy of the temporary output file
+    if OUTCOME_STORAGE["pseudotime_inference.py"] == True:
+        shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
+
 
 def cluster_and_plot(input_data_dir: str, annotations: list = None, embedding: str = None, verbose: bool = False):
     if annotations is None:
@@ -444,7 +467,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             preprocess_data(mode, raw_data_dir)"""
         # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
         # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"))
-        infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected","batch_corrected_HVG_PDAC.h5ad"), reference_genome_path=r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", corrected_representation="X_scANVI_corrected",verbose=True)        
+        # infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_HVG_PDAC.h5ad"), r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", corrected_representation="X_scANVI_corrected", verbose=True)
+        infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "cnv_PDAC.h5ad"),verbose=True)        
         purge_tempfiles()
         sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
     except Exception:

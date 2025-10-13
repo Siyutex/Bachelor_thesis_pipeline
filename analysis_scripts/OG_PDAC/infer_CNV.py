@@ -1,7 +1,8 @@
 # infer copy number variations on an aggregated / batch corrected h5ad file
 # Input is an aggregated (batch corrected) h5ad file
-# output is an h5ad withe the following new annotations:
+# output is an h5ad, just containing ductal cells, with the following new annotations:
 # adata.layers["gene_values_cnv"] = number of copies per gene
+# adata.obs["cnvs"] = summed number of gene copies for all genes per cell (cancer cells should be more than normal cells)
 # adata.obsm["X_cnv"] = smoothed and denoised gene expression along genomic locations
 
 import infercnvpy as cnv
@@ -10,6 +11,8 @@ import scanpy as sc
 import os
 import pandas as pd
 import sys
+import numpy as np
+from scipy import sparse
 
 if __name__ == "__main__":
     # import cmd args
@@ -57,7 +60,21 @@ if __name__ == "__main__":
 
     # infer CNV
     vprint("Inferring CNV...")
-    cnv.tl.infercnv(adata,reference_key="cancer_state", reference_cat="non_cancerous", calculate_gene_values=True, key_added="cnv") # reference of which cells are normal and should not have CNVs (from annotated input data)
+    cnv.tl.infercnv(adata, reference_key="cancer_state", reference_cat="non_cancerous", calculate_gene_values=True, key_added="cnv") # reference of which cells are normal and should not have CNVs (from annotated input data)
+
+    # add CNVs per cell to obs
+    vprint("Adding CNVs per cell to obs...")
+    X = adata.layers["gene_values_cnv"]
+
+    if sparse.issparse(X):
+        summed = np.array(X.sum(axis=1)).ravel()   # convert from matrix to 1D ndarray
+    else:
+        summed = np.nansum(X, axis=1)              # ignore NaNs safely
+
+    adata.obs["summed_cnvs"] = summed
+
+    print(adata.obs.keys())
+    print(adata.obs["summed_cnvs"][:5])
 
     # save results
     vprint("Saving results...")
