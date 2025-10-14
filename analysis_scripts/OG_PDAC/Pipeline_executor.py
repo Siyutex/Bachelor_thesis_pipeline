@@ -4,11 +4,12 @@
 import subprocess # needed for running other scripts
 import os # needed for file and directory operations
 from enum import Enum
-import json # needed for forwarding python objects to subprocesses
 import shutil # needed for file storage operations
 import tempfile # needed for temporary file operations
 import sys # needed to exit the program
+from dataclasses import dataclass
 import helper_functions as hf
+
 
 
 #check if the required directories exist, if not create them
@@ -28,8 +29,7 @@ if not os.path.exists(os.path.join(tempfile.gettempdir(),"python")):
 SCRIPT_DIR = os.path.dirname(__file__)  # directory where this script is located
 # list of directories (see choose_pipeline_mode for valid structures for each entry)
 RAW_DATA_DIRS = [    
-                os.path.join(SCRIPT_DIR, "..", "..", "Data","OG_data","NCBI","PDAC_cancerous"),
-                os.path.join(SCRIPT_DIR, "..", "..", "Data","OG_data","NCBI","PDAC_non_cancerous"),
+                os.path.join(SCRIPT_DIR, "..", "..", "Data","pretraining", "cancerSCEM", "breast_cancer_cancerous")
                 ]
 OUTPUT_STORAGE_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data", "output_storage")  # directory for optional permanent storage of indermediate subprocess outputs
 TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage of temporary pipeline files
@@ -130,81 +130,102 @@ def request_stop(signum, frame):
     sys.exit(0)
 
 
+@dataclass
+class FilteringParameters:
+    """
+    Configuration for filtering low-quality cells and genes from single-cell data.
 
-def preprocess_data(pipeline_mode: pipeline_mode, raw_data_dir: str):
-    """Loops through the RAW_DATA_DIR and runs Preprocessing.py on each file / folder based on the chosen pipeline mode.
-    Saves preprocessed files to temp/preprocessed if outcome_storage for Preprocessing.py is True."""
+    Attributes:
+        min_n_genes_percentile: 
+            Cells with fewer expressed genes than this percentile are removed.
+        min_n_cells_percentage: 
+            Genes expressed in fewer than this fraction of cells are removed.
+        min_n_UMIs_percentile:
+            Cells with fewer UMI counts than this percentile are removed.
+        max_n_MADs:
+            Cells with mitochondrial percentages greater than (median + this many MADs) are removed.
+        expected_doublet_percentage:
+            Fraction of cells expected to be doublets, used by Scrublet. 
+            See the sequencing device manufacturer’s recommendations.
+    """
 
-    # check if outcome storage directory has preprocessed folder, if not create it
-    if not os.path.exists(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed")) and OUTCOME_STORAGE["Preprocessing.py"] == True:  # check if temp directory has preprocessed folder and outcome storage is True
-        os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))  # create preprocessed folder if it does not exist 
-    
-    # output path for preprocessed files with a prefix in a subdirectory of OUTCOME_STORAGE_DIR
-    if OUTCOME_STORAGE["Preprocessing.py"] == True:
-        output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "preprocessed")
+    # default values chosen based on manual inspection of plots of OG_PDAC data from https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE212966#:~:text=Summary%20Pancreatic%20ductal%20adenocarcinoma%20,plot%20to%20predict%20the%20overall
+    min_n_genes_percentile: int = 10
+    min_n_cells_percentage: float = 0.01
+    min_n_UMIs_percentile: int = 10
+    max_n_MADs: int = 1
+    expected_doublet_percentage: float = 0.024
 
-    # check if preprocessed folder exists in TEMP_DIR, if not create it
+def preprocess_data(
+        raw_data_dir: str,
+        pipeline_mode: pipeline_mode, 
+        use_ensembl_ids: bool = False, 
+        save_output: bool = False, 
+        verbose: bool = False,
+        filtering_params: FilteringParameters = FilteringParameters()) -> list[str]:
+    """
+    Loops through raw_data_dir and runs Preprocessing.py on each file / folder contained in it.
+    Data loading in Preprocessing.py is depends on pipeline_mode, which is chosen by choose_pipeline_mode().
+    Saves output files to TEMP_DIR and permanently to OUTPUT_STORAGE_DIR/preprocessed if save_output is true.
+    Names output files after raw_data_dir_i.
+
+    Parameters:
+        raw_data_dir (str): path to raw data directory. This should be a directory that contains datasets in any supported format.
+            Currently supported formats are: 10x genomics, GDC, cancerSCEM. Example: .../glioma/dataset1, dataset2 ...
+        pipeline_mode (pipeline_mode): pipeline mode enum value, run choose_pipeline_mode() to get this value
+        use_ensebml_ids (bool, optional): whether to use ensembl ids for gene names. Defaults to False, as
+            not all input datasets have ensembl ids (eg cancerSCEM). If false, gene symbols will be used,
+            which may lead to duplicate gene names and issues downstream.
+        save_output (bool, optional): whether to save output files permanently. Defaults to False.
+        verbose (bool, optional): whether to print verbose output from subprocess. Defaults to False.
+        filtering_params (FilteringParameters, optional): configuration for filtering low-quality cells and genes from single-cell data.
+            Defaults to FilteringParameters() default values. See class definition for details.
+
+    Returns:
+        output_file_list (list[str]): list of file paths to the outputs files
+    """
+
+    filtering_params_list = [
+        filtering_params.min_n_genes_percentile,
+        filtering_params.min_n_cells_percentage,
+        filtering_params.min_n_UMIs_percentile,
+        filtering_params.max_n_MADs,
+        filtering_params.expected_doublet_percentage,
+    ]
+
+    # check if OUTCOME_STORAGE_DIR and TEMP_DIR have preprocessed folder, if not create it
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), exist_ok=True)
     os.makedirs(os.path.join(TEMP_DIR, "preprocessed"), exist_ok=True)
 
-    # assign output path variable to be equal to TEMP_DIR/preprocessed
+    # assign directories for temporary and permanent storage
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "preprocessed")
     output_temp_dir = os.path.join(TEMP_DIR, "preprocessed")
 
-    # assign datatype variable based on chosen pipeline mode
+    # assign output file list
+    output_file_list = []
+
+    # assign datatype
     datatype = str(pipeline_mode.name)
 
-    # run script on RAW_DATA_DIR based on chosen pipeline mode
-    # define iterator for file naming + 1 for each file in element in raw_data_dir
-    i = 0
-    if datatype == pipeline_mode.MTX_TSVs_in_subfolders.name:
-        
-        # iterate over folders in raw data directory containing two tsv files and one mtx file each
-        for folder in os.listdir(raw_data_dir):
-            print("Currently preprocessing: " +  folder)
-            temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_temp_dir, [datatype])
-            
-            # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
-            os.rename(temp_output_path, os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
-            temp_output_path = os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad")
+    i = 0 # iterator for file naming
+    for element in os.listdir(raw_data_dir): # element can be a file or folder, data loading handled by Preprocessing.py
+        print("Currently preprocessing: " +  element)
+        temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, element), output_temp_dir, [datatype, use_ensembl_ids, filtering_params_list ,verbose])
 
-            # if specified, permanently store a copy of the temporary output file
-            if OUTCOME_STORAGE["Preprocessing.py"] == True:
-                shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
+        # rename output file
+        os.rename(temp_output_path, os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
+        temp_output_path = os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad")
 
-            i += 1
+        # add output file to output_file_list
+        output_file_list.append(temp_output_path)
 
-    elif datatype == pipeline_mode.compressed_MTX_TSVs_in_subfolders.name:
+        # if specified, permanently store a copy of the temporary output file
+        if save_output == True:
+            shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
-        # iterate over folder in raw data directory, then forward compressed files in them
-        for folder in os.listdir(raw_data_dir):
-            print("Currently preprocessing: " +  folder)
-            temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, folder), output_temp_dir, [datatype])
+        i += 1
 
-            # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
-            os.rename(temp_output_path, os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
-            temp_output_path = os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad")
-
-            # if specified, permanently store a copy of the temporary output file
-            if OUTCOME_STORAGE["Preprocessing.py"] == True:
-                shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
-
-            i += 1
-
-    elif datatype == pipeline_mode.dot_matrix_files.name:
-
-        # directly forward .matrix files in RAW_DATA_DIR
-        for file in os.listdir(raw_data_dir):
-            print("Currently preprocessing: " +  file)
-            temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, file), output_temp_dir, [datatype])
-
-            # rename file at temp_output_path to "preprocessed_{raw_data_dir}_i.h5ad" and adjust path
-            os.rename(temp_output_path, os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
-            temp_output_path = os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad")
-
-            # if specified, permanently store a copy of the temporary output file
-            if OUTCOME_STORAGE["Preprocessing.py"] == True:
-                shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
-
-            i += 1
+    return output_file_list
 
 
 def annotate_cell_types(input_data_dir: str):
@@ -460,16 +481,17 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         pass  # SIGHUP not available on Windows
 
     # --- main loop ---
+    use_ensebml_ids = False # define whether to use ensembl ids, used for entire pipeline to avoid mismatches
 
     try:
-        """for raw_data_dir in RAW_DATA_DIRS:
+        for raw_data_dir in RAW_DATA_DIRS:
             mode = choose_pipeline_mode(raw_data_dir)
-            preprocess_data(mode, raw_data_dir)"""
+            preprocess_data(raw_data_dir, mode, use_ensembl_ids=use_ensebml_ids, save_output=False, verbose=True)
         # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
         # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"))
         # infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_HVG_PDAC.h5ad"), r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", corrected_representation="X_scANVI_corrected", verbose=True)
-        for file in ["annotated_PDAC_cancerous_4.h5ad", "annotated_PDAC_non_cancerous_2.h5ad"]:
-            cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated", file), ["cell_type"], verbose=True)
+        # for file in ["annotated_PDAC_cancerous_4.h5ad", "annotated_PDAC_non_cancerous_2.h5ad"]:
+        #     cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated", file), ["cell_type"], verbose=True)
         
         purge_tempfiles()
         sys.exit(0)

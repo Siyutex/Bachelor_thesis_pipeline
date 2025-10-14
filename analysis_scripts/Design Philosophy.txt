@@ -18,6 +18,7 @@ General design:
 	- temporary files can be permanently saved to a copy if specified
 	- all termporary files are automatically deleted after the pipeline finishes
 	- outsource commonly used functions to JL_helper_functions library
+	- print used in subprocesses for major steps (progress updates), vprint for precise debugging info
 
 
 Error Handling Philosophy for Thesis & Reusable Code
