@@ -60,7 +60,8 @@ if __name__ == "__main__":
 
     # infer CNV
     vprint("Inferring CNV...")
-    cnv.tl.infercnv(adata, reference_key="cancer_state", reference_cat="non_cancerous", calculate_gene_values=True, key_added="cnv") # reference of which cells are normal and should not have CNVs (from annotated input data)
+    # use reference_key and reference_cat to indicate non cancerous cells
+    cnv.tl.infercnv(adata, calculate_gene_values=True, key_added="cnv", chunksize=100, window_size=100) # reference of which cells are normal and should not have CNVs (from annotated input data)
 
     # add CNVs per cell to obs
     vprint("Adding CNVs per cell to obs...")

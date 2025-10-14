@@ -468,9 +468,11 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
         # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"))
         # infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_HVG_PDAC.h5ad"), r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", corrected_representation="X_scANVI_corrected", verbose=True)
-        infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "cnv_PDAC.h5ad"),verbose=True)        
+        for file in ["annotated_PDAC_cancerous_4.h5ad", "annotated_PDAC_non_cancerous_2.h5ad"]:
+            cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated", file), ["cell_type"], verbose=True)
+        
         purge_tempfiles()
-        sys.exit(0) # don't want to loop, while is just to be able to break out of it with a signal
+        sys.exit(0)
     except Exception:
         purge_tempfiles()
         raise # re-raise the exception to see the traceback and error message

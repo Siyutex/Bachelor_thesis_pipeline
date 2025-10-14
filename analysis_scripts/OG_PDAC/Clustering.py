@@ -105,20 +105,21 @@ else:
 vprint("computing PCA embeddings...")
 sc.tl.pca(adata, svd_solver="arpack")
 vprint("finding neighbors...")
-sc.pp.neighbors(adata)
+sc.pp.neighbors(adata, use_rep="X_pca", n_neighbors=15)
 vprint("computing leiden clusters...")
-sc.tl.leiden(adata)
+sc.tl.leiden(adata, resolution=0.1)
 vprint("computing UMAP embeddings...")
 sc.tl.umap(adata)
 
 # plotting
-plot_with_external_legend(adata, show=False, save=True, color="leiden", title=f"UMAP colored by Leiden for {os.path.basename(input_data_file_or_dir)}")
-
+plot_with_external_legend(adata, show=True, save=False, color="cell_type", title=f"UMAP all ductal cells for {os.path.basename(input_data_file_or_dir)}")
+plot_with_external_legend(adata, show=True, save=False, color="leiden", title=f"UMAP only ductal cells colored by leiden clusters for {os.path.basename(input_data_file_or_dir)}")
+"""
 for annotation in annotation_columns:
     plot_with_external_legend(adata, show=False, save=True, color=annotation, title=f"UMAP colored by {annotation} for {os.path.basename(input_data_file_or_dir)}")
 
 if os.path.isdir(input_data_file_or_dir) or ("cancer_state" in adata.obs.columns and "batch" in adata.obs.columns):
     plot_with_external_legend(adata, show=False, save=True, color="cancer_state", title=f"UMAP colored by cancer state for {os.path.basename(input_data_file_or_dir)}")
     plot_with_external_legend(adata, show=False, save=True, color="batch", title=f"UMAP colored by batch for {os.path.basename(input_data_file_or_dir)}")
-
+"""
 print(f"Output: {output_data_dir}")

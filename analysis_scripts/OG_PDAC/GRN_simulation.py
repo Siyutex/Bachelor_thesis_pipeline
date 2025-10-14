@@ -155,5 +155,5 @@ if __name__ == "__main__":
         for attractor in attractors_mts:
             print(attractor)
     except:
-        raise RuntimeError("You done fucked up m8")
+        raise RuntimeError("No attractors found")
  
