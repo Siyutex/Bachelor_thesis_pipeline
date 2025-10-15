@@ -157,7 +157,7 @@ if __name__ == "__main__":
 
     ## get input arguments
     print("Importing command line arguments...")
-    input_data_file_or_dir, output_dir, input_data_type, use_ensembl_ids, filtering_params_list, verbose = hf.import_cmd_args(6)
+    input_data_file_or_dir, output_dir, input_data_type, filtering_params_list, use_ensembl_ids, verbose = hf.import_cmd_args(6)
     vprint = hf.make_vprint(verbose)
 
     # set var_names

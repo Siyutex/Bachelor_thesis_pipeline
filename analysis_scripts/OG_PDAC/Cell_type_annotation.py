@@ -1,72 +1,47 @@
 # INPUT: preprocessed h5ad file 
 # normalize the expression per cell (so score magnitude is not biased by overall expression magnitude of a cell)
-# log1p, so very highly expressed markers don't drown out signal of lowly / normally expressed markers
-# sc.tl.score_genes for each set of markers, then choose cell type with highest score for each cell
-# if one score is significantly higher than the others, choose that cell type
-# if that is not the case choose "other"
+# get z scores for each gene
+# get putative cell annotation scores
+# transfer cell type annotations to adata.obs
 
 import scanpy as sc
 import os 
-import sys
+import json
 import numpy as np
 from scipy import sparse
 import pandas as pd
 from matplotlib import pyplot as plt
+import helper_functions as hf
 
-# import command line arguments from ececutor script
-input_data_file = sys.argv[1] if len(sys.argv) > 1 else print("Please provide the path to the input file")
-output_data_dir = sys.argv[2] if len(sys.argv) > 2 else print("Please provide the path to the output directory")
 
-# import input data into anndata object (handles compressed h5ad files as well)
-print("Reading data")
-adata = sc.read_h5ad(input_data_file)
 
-# original marker list
-MARKER_LISTS = { # verified with cellmarker 2.0
-    # epithelial 
-    "ductal_cell": ["CFTR", "SOX9", "MUC1", "EPCAM", "KRT8", "KRT18", "KRT19", "CDH1"],
-    "acinar_cell": ["PRSS1", "PRSS2", "CPA1", "CPA2", "AMY2A/B", "CELA3A", "EPCAM", "KRT8", "KRT18", "KRT19", "CDH1"],
 
-    # endocrine
-    "alpha-cell": ["GCG"],
-    "beta-cell": ["INS"],
-    "delta-cell": ["SST"],
-    "PP-cell": ["PPY"],
-    "epsilon-cell": ["GHRL"],
-
-    # immunte
-    "T_cell": ["PTPRC", "CD3D", "CD3E", "CD4", "CD8A"],
-    "B_cell": ["PTPRC", "CD19", "CD79A", "MS4A1", "MZB1"],
-    "NK_cell": ["PTPRC", "NCAM1", "NKG7", "GNLY"],
-    "macrophage": ["PTPRC", "CD14", "CD68", "LYZ", "FCGR3A"],
-    "dendritic_cell": ["PTPRC", "ITGAX", "CLEC9A"],
-    "neutrophil": ["PTPRC", "S100A8", "S100A9", "FCGR3B"],
-    "mast_cell": ["PTPRC", "TPSAB1", "KIT"],
-
-    # stromal
-    "fibroblast": ["PDGFRA", "VIM", "COL1A1", "COL1A2", "LUM", "DCN"],
-    "endothelial_cell": ["PECAM1", "VWF", "CLDN5"],
-    "smooth_muscle_cell": ["ACTA2", "PDGFRB", "RGS5"],
-}
-
-def annotate_markers_z_score(adata, cutoff_unsure, cutoff_other): # cutoff is a value between 0 and 1, specifying how high the second highest score can at most be relative to the highest to still annotate a well defined cell type
+def annotate_markers_z_score(adata, cutoff_unsure, cutoff_other): 
+    # cutoff_unsure is a value between 0 and 1, specifying how high the second highest score can at most be relative to the highest to still annotate a well defined cell type
+    # cutoff_other speciefies how many stdevs above / below the mean the lowest cell type score has to be to annotate a well defined cell type
     # normalize (if we don't, then cells with very high overall expression shift, the means of the genes
     # and thus the z score)
     # logarithmization not needed, because highly and lowly expressed markers already contribute on the same
     # scale because of 0 mean and counting stdevs instead of counts
 
     internal_adata = adata.copy() # so we don't modify the .X of the real data, because it is needed downstream
+    vprint("Normalizing adata...")
     sc.pp.normalize_total(internal_adata, target_sum= 1e4)
     
     # get z scores for each gene
+    vprint("Getting z scores for each gene...")
     X = np.array(internal_adata.X.todense())  # cells x genes, dense ndarray
     mu = X.mean(axis=0)
     sigma = X.std(axis=0)
     internal_adata.X = sparse.csc_matrix((X-mu)/sigma)
 
     # get putative cell annotation scores (>0 means it likely is that cell type, <0 means it likely is not)
+    vprint("Getting putative cell annotation scores...")
     for celltype, marker_list in MARKER_LISTS.items():
-        marker_levels = internal_adata[:, internal_adata.var["gene_symbols"].isin(marker_list)]
+        if use_ensembl_ids:
+            marker_levels = internal_adata[:, internal_adata.var["gene_symbols"].isin(marker_list)]
+        else:
+            marker_levels = internal_adata[:, internal_adata.var_names.isin(marker_list)]
         marker_levels = np.array(marker_levels.X.todense())
 
         # check if array is not empty (if it is empty that means that there is no overlap between
@@ -80,6 +55,7 @@ def annotate_markers_z_score(adata, cutoff_unsure, cutoff_other): # cutoff is a 
     adata.obs['cell_type'] = None
     score_columns = [key + "_score" for key in MARKER_LISTS.keys()]
 
+    vprint("Transfering cell type annotations...")
     for cell in range(adata.shape[0]):
         ranked_score_list = []
         # rank cell type scores for the cell
@@ -119,10 +95,13 @@ def display_fractions(adata):
     df = pd.DataFrame(data, columns=["cell_type", "fraction"]).round(3)
     print(df)
 
+    if (df["fraction"] == 0).sum() >= df.shape[0]-1:
+        raise ValueError("All but one cell types have a fraction of 0. Perhaps the use_ensembl_ids parameter does not match the input data?")
+
 
 def save_outcome(adata):
     # save the processed data to temporary h5ad file, make relevant directory first
-    final_output_path = os.path.join(output_data_dir,  "annotated_" + os.path.basename(input_data_file).removeprefix("preprocessed_"))
+    final_output_path = os.path.join(output_data_dir, os.path.basename(input_data_file))
     adata.write(final_output_path, compression="gzip")
 
     # foward the path to the temporary file to the executor script via stdout
@@ -136,8 +115,27 @@ def save_outcome(adata):
 
 
 
-annotate_markers_z_score(adata, 0.8, -0.2) # second highest score has to be lower than 80% of highest to be sure, any score has to be at least above 0.2 stdevs below the mean for that score among all cells
-display_fractions(adata)
-save_outcome(adata)
+if __name__ == "__main__":
+
+    # import cmd args
+    input_data_file, output_data_dir, marker_file_path, cutoff_unsure, cutoff_other, use_ensembl_ids, verbose = hf.import_cmd_args(5)
+    vprint = hf.make_vprint(verbose)
+
+    with open(marker_file_path) as f:
+        MARKER_LISTS = json.load(f)
+
+    # import input data into anndata object (handles compressed h5ad files as well)
+    print("Reading data...")
+    adata = sc.read_h5ad(input_data_file)
+
+    print("Annotating cell types...")
+    annotate_markers_z_score(adata, cutoff_unsure, cutoff_other) # second highest score has to be lower than cutoff unsure (eg 0.8 = 80%) of highest to be sure, any score has to be at least above cutoff other (eg 0.2) stdevs below the mean for that score among all cells
+    
+
+    print("Displaying fractions...")
+    display_fractions(adata)
+    
+    print("Saving outcome...")
+    save_outcome(adata)
 
 

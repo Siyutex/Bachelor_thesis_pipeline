@@ -1,10 +1,8 @@
 General design: 
 	- name all folder with "_" and standard english letters to avoid messed up pathing
-	- Relative filepaths
-		- use "/" instead of "\" as the latter is an escape character in
-	  python
+	- Relative filepaths and use raw string to avoid escape chars (r"...")
 	- use functions
-	- explain everything with comments
+	- explain everything with comments and standardized docstrings
 	- wrap EVERY SCRIPT in if __name__ == "__main__" (to avoid fork bombs with subprocesses)
 	- try to avoid hardcoded strings as arguments (use variables / constants so it still matches if changed)
 	- pipeline executor files to run pipeline in modules
@@ -14,7 +12,7 @@ General design:
 	  --> easier bugfixing
 	- subprocesses run on minimal dataset (eg one file or one tissue type, looping in executor)
 	- standardized filetype (.h5ad) for easier file passing between subprocesses
-	- data passed between executor and subprocess via execute_subprocess as paths or python objects
+	- data passed between executor and subprocess via execute_subprocess as paths to files (JSON, csv, h5ad, ...) or python objects
 	- temporary files can be permanently saved to a copy if specified
 	- all termporary files are automatically deleted after the pipeline finishes
 	- outsource commonly used functions to JL_helper_functions library

@@ -1,0 +1,101 @@
+{
+  "ductal_cell": [
+    "CFTR",
+    "SOX9",
+    "MUC1",
+    "EPCAM",
+    "KRT8",
+    "KRT18",
+    "KRT19",
+    "CDH1"
+  ],
+  "acinar_cell": [
+    "PRSS1",
+    "PRSS2",
+    "CPA1",
+    "CPA2",
+    "AMY2A/B",
+    "CELA3A",
+    "EPCAM",
+    "KRT8",
+    "KRT18",
+    "KRT19",
+    "CDH1"
+  ],
+  "alpha-cell": [
+    "GCG"
+  ],
+  "beta-cell": [
+    "INS"
+  ],
+  "delta-cell": [
+    "SST"
+  ],
+  "PP-cell": [
+    "PPY"
+  ],
+  "epsilon-cell": [
+    "GHRL"
+  ],
+  "T_cell": [
+    "PTPRC",
+    "CD3D",
+    "CD3E",
+    "CD4",
+    "CD8A"
+  ],
+  "B_cell": [
+    "PTPRC",
+    "CD19",
+    "CD79A",
+    "MS4A1",
+    "MZB1"
+  ],
+  "NK_cell": [
+    "PTPRC",
+    "NCAM1",
+    "NKG7",
+    "GNLY"
+  ],
+  "macrophage": [
+    "PTPRC",
+    "CD14",
+    "CD68",
+    "LYZ",
+    "FCGR3A"
+  ],
+  "dendritic_cell": [
+    "PTPRC",
+    "ITGAX",
+    "CLEC9A"
+  ],
+  "neutrophil": [
+    "PTPRC",
+    "S100A8",
+    "S100A9",
+    "FCGR3B"
+  ],
+  "mast_cell": [
+    "PTPRC",
+    "TPSAB1",
+    "KIT"
+  ],
+  "fibroblast": [
+    "PDGFRA",
+    "VIM",
+    "COL1A1",
+    "COL1A2",
+    "LUM",
+    "DCN"
+  ],
+  "endothelial_cell": [
+    "PECAM1",
+    "VWF",
+    "CLDN5"
+  ],
+  "smooth_muscle_cell": [
+    "ACTA2",
+    "PDGFRB",
+    "RGS5"
+  ]
+}

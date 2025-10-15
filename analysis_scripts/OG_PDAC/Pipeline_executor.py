@@ -159,30 +159,44 @@ class FilteringParameters:
 def preprocess_data(
         raw_data_dir: str,
         pipeline_mode: pipeline_mode, 
-        use_ensembl_ids: bool = False, 
-        save_output: bool = False, 
+        filtering_params: FilteringParameters = FilteringParameters(),
+        use_ensembl_ids: bool = True, 
+        save_output: bool = False,
+        output_prefix: str = "preprocessed", 
         verbose: bool = False,
-        filtering_params: FilteringParameters = FilteringParameters()) -> list[str]:
+        ) -> list[str]:
     """
     Loops through raw_data_dir and runs Preprocessing.py on each file / folder contained in it.
-    Data loading in Preprocessing.py is depends on pipeline_mode, which is chosen by choose_pipeline_mode().
-    Saves output files to TEMP_DIR and permanently to OUTPUT_STORAGE_DIR/preprocessed if save_output is true.
-    Names output files after raw_data_dir_i.
+    
+    Input should be a directory with containing scRNAseq samples in any supported format (10x genomics, GDC, cancerSCEM).
+
+    Outputs a gzip compressed h5ad file for each sample, filtered for low-quality cells and genes and with doublets removed.
+    Output files are named preprocessed_{raw_data_dir}_{index}.h5ad.
+
+    Annotations added to adata.obs: [numpy.int64:"n_genes", numpy.float32:"n_counts", numpy.float32:"pct_counts_mito", numpy.float64:"doublet_score", numpy.bool:"predicted_doublet"] (number of genes in a cell,
+    number of UMI counts in a cell, mitochondrial gene percentage in a cell, doublet score (used by Scrublet to determine whether a cell is predicted to be a doublet), whether a cell is predicted to be a doublet
+
+    Annotations added to adata.var: [numpy.int64:"n_cells", numpy.bool:"mito"] (number of cells in which a gene is expressed, whether a gene is mitochondrial)
+
+    Conditional annotations added to adata.var: [str:"gene_symbols" or str:"gene_ids"] (gene symbols or ensembl ids, if use_ensembl_ids is True, ensembl ids will be adata.var_names and gene symbols will be adata.var["gene_symbols"] and vice versa)
 
     Parameters:
         raw_data_dir (str): path to raw data directory. This should be a directory that contains datasets in any supported format.
             Currently supported formats are: 10x genomics, GDC, cancerSCEM. Example: .../glioma/dataset1, dataset2 ...
-        pipeline_mode (pipeline_mode): pipeline mode enum value, run choose_pipeline_mode() to get this value
-        use_ensebml_ids (bool, optional): whether to use ensembl ids for gene names. Defaults to False, as
-            not all input datasets have ensembl ids (eg cancerSCEM). If false, gene symbols will be used,
-            which may lead to duplicate gene names and issues downstream.
-        save_output (bool, optional): whether to save output files permanently. Defaults to False.
-        verbose (bool, optional): whether to print verbose output from subprocess. Defaults to False.
+        pipeline_mode (pipeline_mode): pipeline mode enum value, run choose_pipeline_mode() to get this value.
+            Used to determine how to load data for different formats from raw_data_dir.
         filtering_params (FilteringParameters, optional): configuration for filtering low-quality cells and genes from single-cell data.
             Defaults to FilteringParameters() default values. See class definition for details.
+        use_ensebml_ids (bool, optional): whether to use ensembl ids for gene names. Defaults to True.
+            Not all input datasets have ensembl ids (eg cancerSCEM). If false, gene symbols will be used,
+            which may lead to duplicate gene names and issues downstream.
+        save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/preprocessed.
+            Defaults to False.
+        output_prefix (str, optional): prefix for output file names. Defaults to "preprocessed".
+        verbose (bool, optional): whether to print verbose output from subprocess. Defaults to False.
 
     Returns:
-        output_file_list (list[str]): list of file paths to the outputs files
+        output_file_list (list[str]): list of file paths to output files
     """
 
     filtering_params_list = [
@@ -210,11 +224,11 @@ def preprocess_data(
     i = 0 # iterator for file naming
     for element in os.listdir(raw_data_dir): # element can be a file or folder, data loading handled by Preprocessing.py
         print("Currently preprocessing: " +  element)
-        temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, element), output_temp_dir, [datatype, use_ensembl_ids, filtering_params_list ,verbose])
+        temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Preprocessing.py"), os.path.join(raw_data_dir, element), output_temp_dir, [datatype, filtering_params_list, use_ensembl_ids, verbose])
 
         # rename output file
-        os.rename(temp_output_path, os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
-        temp_output_path = os.path.join(output_temp_dir, f"preprocessed_{os.path.basename(raw_data_dir)}_{i}.h5ad")
+        os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(raw_data_dir)}_{i}.h5ad"))
+        temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(raw_data_dir)}_{i}.h5ad")
 
         # add output file to output_file_list
         output_file_list.append(temp_output_path)
@@ -228,10 +242,44 @@ def preprocess_data(
     return output_file_list
 
 
-def annotate_cell_types(input_data_dir: str):
+def annotate_cell_types(
+        input_data_dir: str, 
+        marker_file_path: str, 
+        cutoff_unsure: float = 0.8, 
+        cutoff_other: float = -0.2, 
+        use_ensembl_ids: bool = True, 
+        save_output: bool = False, 
+        input_prefix: str = "preprocessed",
+        output_prefix: str = "cell_type_annotated",
+        verbose: bool = False) -> list[str]:
     """ 
-    Run Cell_type_annotation.py on a given directory of preprocessed h5ad files.
-    Creates necessary directories if not present. Saves output permanenlty if specified.
+    Loops through input_data_dir and runs Cell_type_annotation.py on each contained h5ad file.
+
+    Input should be a directory with containing preprocessed h5ad files.
+
+    Outputs a gzip compressed h5ad file for each file, with cell type annotations added to each cell.
+    Output files are named {output_prefix}_{basename}.h5ad.
+
+    Annotations added to adata.obs: [numpy.float32: "<cell_type>_score", str: "cell_type"] 
+    (score for each cell type denoted in the marker file, chosen cell type for each cell)
+
+    Parameters:
+        input_data_dir (str): path to directory containing h5ad files to annotate.
+        marker_file_path (str): path to file with marker genes for each cell type.
+            This should be a json with cell type names as keys and lists of marker gene symbols as values.
+        cutoff_unsure (float, optional): a value between 0 and 1, specifying how high the second highest 
+            score can at most be relative to the highest to still annotate a well defined cell type
+            Defaults to 0.8 (0.8 times highest score).
+        cutoff_other (float, optional): how many stdevs above / below the mean score the lowest cell type 
+            score has to be to annotate a well defined cell type. Defaults to -0.2.
+        use_ensembl_ids (bool, optional): whether ensembl ids have been used for gene names. Defaults to True.
+        save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/cell_type_annotated. Defaults to False.
+        input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "preprocessed".
+        output_prefix (str, optional): prefix for output file names. Defaults to "cell_type_annotated".
+        verbose (bool, optional): whether to print verbose output from subprocess. Defaults to False.
+
+    Returns:
+        list[str]: list of paths to output files
     """
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have cell_type_annotated folder, if not create it
@@ -242,15 +290,26 @@ def annotate_cell_types(input_data_dir: str):
     output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated")
     output_temp_dir = os.path.join(TEMP_DIR, "cell_type_annotated")
 
+    # assign output file list
+    output_file_list = []
+
     # run script on each file in input_data_dir
     for file in os.listdir(input_data_dir):
         print("Annotating cell types for: " + file)
-        temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Cell_type_annotation.py"), os.path.join(input_data_dir, file), output_temp_dir)
+        temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Cell_type_annotation.py"), os.path.join(input_data_dir, file), output_temp_dir, [marker_file_path, cutoff_unsure, cutoff_other, use_ensembl_ids, verbose])
+        
+        # rename output file
+        os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{file.removeprefix(input_prefix + "_")}"))
+        temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{file.removeprefix(input_prefix + "_")}")
+
+        # add output file to output_file_list
+        output_file_list.append(temp_output_path)
 
         # if specified, permanently store a copy of the temporary output file
-        if OUTCOME_STORAGE["Cell_type_annotation.py"] == True:
+        if save_output == True:
             shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
+    return output_file_list
 
 def correct_batch_effects(input_data_dir: str):
     """ WIP; DOES NOT WORK
@@ -481,13 +540,15 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         pass  # SIGHUP not available on Windows
 
     # --- main loop ---
-    use_ensebml_ids = False # define whether to use ensembl ids, used for entire pipeline to avoid mismatches
+    use_ensebml_ids = True # define whether to use ensembl ids, used for entire pipeline to avoid mismatches
 
     try:
-        for raw_data_dir in RAW_DATA_DIRS:
+        """for raw_data_dir in RAW_DATA_DIRS:
             mode = choose_pipeline_mode(raw_data_dir)
             preprocess_data(raw_data_dir, mode, use_ensembl_ids=use_ensebml_ids, save_output=False, verbose=True)
-        # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"))
+            """
+        
+        annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), marker_file_path=r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", use_ensembl_ids=use_ensebml_ids, save_output=True, verbose=True)
         # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"))
         # infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_HVG_PDAC.h5ad"), r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", corrected_representation="X_scANVI_corrected", verbose=True)
         # for file in ["annotated_PDAC_cancerous_4.h5ad", "annotated_PDAC_non_cancerous_2.h5ad"]:
