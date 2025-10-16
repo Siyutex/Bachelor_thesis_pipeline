@@ -9,6 +9,7 @@ import tempfile # needed for temporary file operations
 import sys # needed to exit the program
 from dataclasses import dataclass
 import helper_functions as hf
+from typing import Literal
 
 
 
@@ -406,30 +407,60 @@ def infer_pseudotime(input_data_file: str, verbose: bool = False):
         shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
 
-def cluster_and_plot(input_data_dir: str, annotations: list = None, embedding: str = None, verbose: bool = False):
-    if annotations is None:
-        raise ValueError("annotations must be a list of strings describing adata.obs[...] column names")
+def cluster_and_plot(
+        input_data_dir: str, 
+        obs_annotations: list[str], 
+        layer: str = "X", # X for raw representation, any value of adata.layers
+        projection: Literal["UMAP", "PCA"]  = "UMAP", 
+        show: bool = True,
+        save_output: bool = False,
+        verbose: bool = False) -> None:
+    
+    """
+    Creates cluster plots (UMAP / PCA) of cells in input_data_dir. One plot per obs annotation (eg one plot for cell type clusters, ...).
+    Also computes DEGs between clusters and pritns to stdout.
 
-    script_path = os.path.join(SCRIPT_DIR, "Clustering.py")
-    script_name = os.path.basename(script_path).removesuffix(".py")
+    Input should be an h5ad file with obs annotations for each cell that should be used for clustering.
+
+    Outputs one png file for each obs annotation containing a cluster plot.
+    Output files are named {UMAP|PCA}_colored_by_{obs_annotation}_for_{basename}.png.
+
+    Does not add annotations, as it does not return an h5ad file.
+
+    Parameters:
+        input_data_dir (str): path to h5ad file with obs annotations for each cell.
+        obs_annotations (list[str]): list of obs annotations to cluster. eg ["cell_type", "tissue"]
+        layer (str, optional): anndata layer to use for clustering. Defaults to "X" (raw representation).
+        projection (literal ["UMAP", "PCA"], optional): projection to use for clustering. Defaults to "UMAP".
+        show (bool, optional): whether to show the plots. Defaults to True.
+        save_output (bool, optional): whether to save the plots permanently. Defaults to False.
+        verbose (bool, optional): whether to print verbose output. Defaults to False.
+
+    Returns:
+        None
+    """
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have relevant folder, if not create it
-    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, script_name), exist_ok=True)
-    os.makedirs(os.path.join(TEMP_DIR, script_name), exist_ok=True)
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "plots"), exist_ok=True)
+    os.makedirs(os.path.join(TEMP_DIR, "plots"), exist_ok=True)
 
     # assign directories for temporary and permanent storage
-    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, script_name)
-    output_temp_dir = os.path.join(TEMP_DIR, script_name)
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "plots")
+    output_temp_dir = os.path.join(TEMP_DIR, "plots")
 
     # run script and assign path to temporary output file
     print(f"Clustering and plotting: {input_data_dir}")
-    hf.execute_subprocess(script_path, input_data_dir, output_temp_dir, [annotations, embedding, verbose])
+    hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Clustering.py"), input_data_dir, output_temp_dir, [obs_annotations, layer, projection, show, verbose])
+
+    # naming happens in subprocess (relies on knowing which obs column was used)
 
     # if specified, permanently store a copy of the temporary output file
-    if OUTCOME_STORAGE[script_name + ".py"] == True:
+    if save_output == True:
         for file in os.listdir(output_temp_dir):
             shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, file))
 
+    # outputs will not be used programatically so no need to return list with output file paths
+    # this is why we also don't use input and output prefixes
     return None
 
 
@@ -548,12 +579,12 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             preprocess_data(raw_data_dir, mode, use_ensembl_ids=use_ensebml_ids, save_output=False, verbose=True)
             """
         
-        annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), marker_file_path=r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", use_ensembl_ids=use_ensebml_ids, save_output=True, verbose=True)
+        # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), marker_file_path=r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", use_ensembl_ids=use_ensebml_ids, save_output=True, verbose=True)
         # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"))
         # infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_HVG_PDAC.h5ad"), r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", corrected_representation="X_scANVI_corrected", verbose=True)
         # for file in ["annotated_PDAC_cancerous_4.h5ad", "annotated_PDAC_non_cancerous_2.h5ad"]:
-        #     cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated", file), ["cell_type"], verbose=True)
-        
+        cluster_and_plot(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\cell_type_annotated\cell_type_annotated__PDAC_cancerous_0.h5ad", ["cell_type"], projection="UMAP", show=True, save_output=True, verbose=True)
+
         purge_tempfiles()
         sys.exit(0)
     except Exception:
