@@ -98,8 +98,10 @@ def main(input_data_file, output_data_dir, refernce_genome_path, corrected_repre
     # check if cell type should be limited, if so modify adata
     print("Checking if cell type should be limited...")
     internal_adata = check_assign_cell_type(internal_adata, cell_type)
+    adata = check_assign_cell_type(adata, cell_type) # we have also limit the actual adata to the cell type, if it is passed so the obsm annotation fits
 
     vprint(f"Internal adata size: {internal_adata.shape}")
+    vprint(f"Original adata size: {adata.shape}")
 
     # preprocess (normalization and log1p required by inferCNVpy)
     print("Preprocessing data...")

@@ -418,8 +418,8 @@ def correct_batch_effects(
     temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Batch_correction.py"), input_data_file, output_temp_dir, [max_considered_genes, verbose])
 
     # rename output file
-    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix)}.h5ad"))
-    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix)}.h5ad")
+    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}.h5ad"))
+    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}.h5ad")
 
     # add output file to output_file_list
     output_file_list.append(temp_output_path)
@@ -481,12 +481,22 @@ def infer_CNVs(
     output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "CNV")
     output_temp_dir = os.path.join(TEMP_DIR, "CNV")
 
+    # assign output file list
+    output_file_list = []
+
     # run script and assign path to temporary output file
     print(f"Inferring GRN from {input_data_file}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "infer_CNV_old.py"), input_data_file, output_temp_dir, [reference_genome_path, corrected_representation, verbose])
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "infer_CNV.py"), input_data_file, output_temp_dir, [reference_genome_path, corrected_representation, cell_type, verbose])
+
+    # rename output file
+    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}.h5ad"))
+    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}.h5ad")
+
+    # add output file to output_file_list
+    output_file_list.append(temp_output_path)
 
     # if specified, permanently store a copy of the temporary output file
-    if OUTCOME_STORAGE["infer_CNV.py"] == True:
+    if save_output == True:
         shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
 
@@ -667,7 +677,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_PDAC.h5ad"), save_output=True, verbose=True, max_considered_genes=100)
         # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", use_ensembl_ids=use_ensebml_ids, verbose=True)
         # aggregated_file = aggregate_batches(os.path.join(TEMP_DIR, "cell_type_annotated"), save_output=True, verbose=True)[0]
-        infer_CNVs(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\batch_corrected\batch_corrected_HVG_PDAC_(scvi_corrected)_genenames.h5ad", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", save_output=True, input_prefix="aggregated", verbose=True, cell_type="ductal_cell", corrected_representation="X_scVI_corrected")
+        infer_CNVs(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\aggregated\aggregated_PDAC.h5ad", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", save_output=True, input_prefix="aggregated", verbose=True, cell_type="ductal_cell")
 
 
 
