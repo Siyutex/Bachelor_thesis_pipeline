@@ -9,5 +9,10 @@ for key in adata.var.keys():
     print(f"Var annotation: {key} of datatype {type(adata.var[key].iloc[0])}")
 for key in adata.obsm.keys():
     print(f"Obsm annotation: {key} of datatype {type(adata.obsm[key].iloc[0])}")
+for key in adata.uns.keys():
+    print(f"Uns annotation: {key} of datatype {type(adata.uns[key].iloc[0])}")
+
+
+print(adata.obs["cell_type"].iloc[:5])
 
 

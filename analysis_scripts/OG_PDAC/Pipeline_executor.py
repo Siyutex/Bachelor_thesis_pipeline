@@ -246,9 +246,9 @@ def preprocess_data(
 def annotate_cell_types(
         input_data_dir: str, 
         marker_file_path: str, 
+        use_ensembl_ids: bool, 
         cutoff_unsure: float = 0.8, 
         cutoff_other: float = -0.2, 
-        use_ensembl_ids: bool = True, 
         save_output: bool = False, 
         input_prefix: str = "preprocessed",
         output_prefix: str = "cell_type_annotated",
@@ -268,12 +268,12 @@ def annotate_cell_types(
         input_data_dir (str): path to directory containing h5ad files to annotate.
         marker_file_path (str): path to file with marker genes for each cell type.
             This should be a json with cell type names as keys and lists of marker gene symbols as values.
+        use_ensembl_ids (bool): whether ensembl ids have been used for gene names.
         cutoff_unsure (float, optional): a value between 0 and 1, specifying how high the second highest 
             score can at most be relative to the highest to still annotate a well defined cell type
             Defaults to 0.8 (0.8 times highest score).
         cutoff_other (float, optional): how many stdevs above / below the mean score the lowest cell type 
             score has to be to annotate a well defined cell type. Defaults to -0.2.
-        use_ensembl_ids (bool, optional): whether ensembl ids have been used for gene names. Defaults to True.
         save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/cell_type_annotated. Defaults to False.
         input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "preprocessed".
         output_prefix (str, optional): prefix for output file names. Defaults to "cell_type_annotated".
@@ -336,7 +336,6 @@ def aggregate_batches(
 
     Parameters:
         input_data_dir (str): path to directory containing h5ad files to annotate.
-        use_ensembl_ids (bool, optional): whether ensembl ids have been used for gene names. Defaults to True.
         save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/cell_type_annotated. Defaults to False.
         input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "preprocessed".
         output_prefix (str, optional): prefix for output file names. Defaults to "cell_type_annotated".
@@ -431,13 +430,47 @@ def correct_batch_effects(
 
     return output_file_list
 
-def infer_CNVs(input_data_file: str, reference_genome_path: str, corrected_representation: str = None, verbose: bool = False):
+
+def infer_CNVs(
+        input_data_file: str, 
+        reference_genome_path: str, 
+        corrected_representation: str = None, 
+        cell_type: str = None,
+        save_output: bool = False,
+        input_prefix: str = "batch_corrected",
+        output_prefix: str = "CNV_inferred",
+        verbose: bool = False) -> list[str]:
     """ 
-    Infer copy number variations from a given aggregated / batch corrected h5ad file.
-    Requires to specify a reference genome, e.g. hg38 to map ensembl IDs (should be adata.var_names)
-    to chromosomal coordinates. The reference genome should be in gtf format (gz compression is supported).
-    Optionally pass a corrected representation in adata.ombsm (e.g. "X_scVI" or "X_scANVI").
-    If not specified, the raw representation is used.
+    Infer copy number variations from an aggregated / batch corrected h5ad file.
+    This works much better with with larger genesets, because it uses a sliding 
+    window to pass over genes that are close on the chromosome.
+
+    Input should be an aggregated / batch corrected h5ad file.
+
+    Requires the following annotations to be present:
+        - if cell_type is passed, adata.obs["cell_type"] (from cell_type_annotation.py)
+        - if corrected_representation is passed, adata.obsm[corrected_representation] (from batch_correction.py)
+        - adata.obs["cancer_state"] (from batch_aggregation.py)
+
+    Outputs a gzip compressed corrected h5ad file with CNV annotations.
+    Output files are named {output_prefix}_{basename}.h5ad.
+
+    Annotations added to adata.obs: []
+
+    Paramaeters:
+        input_data_file (str): path to aggregated / batch corrected h5ad file.
+        reference_genome_path (str): path to reference genome in gtf format. Eg. hg38.gtf.gz.
+            Required to map var_names (which must be ensembl IDs, to allow unique mapping) to chromosomal coordinates.
+        corrected_representation (str, optional): name of corrected representation on adata.obsm to use. 
+            Defaults to None, meaning adata.X will be used.
+        cell_type (str, optional): cell type (from adata.obs["cell_type"]) to infer CNVs for. Defaults to none, meaning cnvs are inferred for all cells.
+        save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/CNV. Defaults to False.
+        input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "batch_corrected".
+        output_prefix (str, optional): prefix for output file names. Defaults to "CNV_inferred".
+        verbose (bool, optional): whether to print verbose output from subprocess. Defaults to False.
+
+    Return:
+        list[str]: list of paths to output files
     """
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
@@ -450,35 +483,11 @@ def infer_CNVs(input_data_file: str, reference_genome_path: str, corrected_repre
 
     # run script and assign path to temporary output file
     print(f"Inferring GRN from {input_data_file}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "infer_CNV.py"), input_data_file, output_temp_dir, [reference_genome_path, corrected_representation, verbose])
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "infer_CNV_old.py"), input_data_file, output_temp_dir, [reference_genome_path, corrected_representation, verbose])
 
     # if specified, permanently store a copy of the temporary output file
     if OUTCOME_STORAGE["infer_CNV.py"] == True:
         shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
-
-
-def prepare_for_pseudotime(input_data_dir: str):
-    script_path = os.path.join(SCRIPT_DIR, "prepare_for_pseudotime.py")
-    script_name = os.path.basename(script_path).removesuffix(".py")
-
-    #check if OUTCOME_STORAGE_DIR and TEMP_DIR have relevant folder, if not create it
-    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, script_name), exist_ok=True)
-    os.makedirs(os.path.join(TEMP_DIR, script_name), exist_ok=True)
-
-    # assign directories for temporary and permanent storage
-    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, script_name)
-    output_temp_dir = os.path.join(TEMP_DIR, script_name)
-
-    # run script and assign path to temporary output file
-    print(f"Prepping for pseudotime: {input_data_dir}")
-    hf.execute_subprocess(script_path, input_data_dir, output_temp_dir)
-
-    # if specified, permanently store a copy of the temporary output file
-    if OUTCOME_STORAGE[script_name + ".py"] == True:
-        for file in os.listdir(output_temp_dir):
-            shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, os.path.basename(file)))
-
-    return None
 
 
 def infer_pseudotime(input_data_file: str, verbose: bool = False):
@@ -630,32 +639,10 @@ def simulate_GRN(input_data_file: str, verbose: bool = False):
 
     # if specified, permanently store a copy of the temporary output file
     if OUTCOME_STORAGE["GRN_simulation.py"] == True:
-        shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
-
-
-def compute_variance():
-    """Loops through the epithelial isolated h5ad files in temp/epithelial_isolated and runs Variance.py on each."""
-
-    ADJ_paths = []  # list to store paths to tumor adjacent tissue files
-    PDAC_paths = []  # list to store paths to tumor tissue files
-
-    for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "epithelial_isolated")):  # iterate over files in the temp directory where epithelial isolated files are stored
-        if file.endswith(".h5ad") and "ADJ" in file:  # check if the file is a h5ad file and tumor adjacent tissue
-            ADJ_paths.append(os.path.join(OUTPUT_STORAGE_DIR, "epithelial_isolated", file))  # add the file path to the list
-        elif file.endswith(".h5ad") and "PDAC" in file:  # check if the file is a h5ad file and tumor tissue
-            PDAC_paths.append(os.path.join(OUTPUT_STORAGE_DIR, "epithelial_isolated", file))
-        else:
-            print(f"Variance: Skipping file {file} as it is not a .h5ad.gz file.")
-
-    ADJ_paths = ",".join(ADJ_paths)  # join the list of paths into a single string separated by commas (so it can be passed as a command line argument)
-    PDAC_paths = ",".join(PDAC_paths)
-
-    subprocess.run(["python", os.path.join(SCRIPT_DIR, "Variance.py"), ADJ_paths, PDAC_paths], check=True)
-            
+        shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))            
 
 
 # main loop
-
 if __name__ == "__main__": # ensures this code runs only when this script is executed directly, not when imported
     
     # --- register signal handlers ---
@@ -676,12 +663,13 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             preprocess_data(raw_data_dir, mode, use_ensembl_ids=use_ensebml_ids, save_output=False, verbose=True)
             """
         
-
-        # infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_HVG_PDAC.h5ad"), r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", corrected_representation="X_scANVI_corrected", verbose=True)
-        # for file in ["annotated_PDAC_cancerous_4.h5ad", "annotated_PDAC_non_cancerous_2.h5ad"]:
         # cluster_and_plot(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\cell_type_annotated\cell_type_annotated__PDAC_cancerous_0.h5ad", ["cell_type"], projection="UMAP", show=True, save_output=True, verbose=True)
-        aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), save_output=True, verbose=True, input_prefix="preprocessed")
         # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_PDAC.h5ad"), save_output=True, verbose=True, max_considered_genes=100)
+        # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", use_ensembl_ids=use_ensebml_ids, verbose=True)
+        # aggregated_file = aggregate_batches(os.path.join(TEMP_DIR, "cell_type_annotated"), save_output=True, verbose=True)[0]
+        infer_CNVs(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\batch_corrected\batch_corrected_HVG_PDAC_(scvi_corrected)_genenames.h5ad", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", save_output=True, input_prefix="aggregated", verbose=True, cell_type="ductal_cell", corrected_representation="X_scVI_corrected")
+
+
 
         purge_tempfiles()
         sys.exit(0)

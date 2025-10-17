@@ -35,6 +35,12 @@ def correct_batches_scVI(adata, max_considered_genes) -> Tuple[anndata.AnnData, 
     """
     internal_adata = adata.copy()
 
+    if not hf.is_normalized(internal_adata):
+        vprint("Normalizing adata...")
+        sc.pp.normalize_total(internal_adata, target_sum=1e4)
+    else:
+        vprint("adata is already normalized")
+
     if max_considered_genes is not "all": # only select HVGs if max_considered_genes is specified as a number
         # do batch aware HVG selection
         print("Selecting highly variable genes...")
@@ -110,8 +116,16 @@ def correct_batches_scANVI(adata_scvi, pretrained_scVI_model) -> Tuple[anndata.A
         The trained scANVI model
     """
 
+    internal_adata = adata_scvi.copy()
+
+    if not hf.is_normalized(internal_adata):
+        vprint("Normalizing adata...")
+        sc.pp.normalize_total(internal_adata, target_sum=1e4)
+    else:
+        vprint("adata is already normalized")
+
     try:
-        model = scvi.model.SCANVI.load("my_scanvi_model/", adata_scvi)
+        model = scvi.model.SCANVI.load("my_scanvi_model/", internal_adata)
     except Exception as e:
         print("No scANVI model found. Training a new one...")
         print(f"Model loading failed because of Exception: {e}")
@@ -122,17 +136,17 @@ def correct_batches_scANVI(adata_scvi, pretrained_scVI_model) -> Tuple[anndata.A
 
     if model is None:
         # set up model with batch information
-        scvi.model.SCANVI.setup_anndata(adata_scvi, batch_key="batch", labels_key="cell_type", unlabeled_category="unlabeled")
+        scvi.model.SCANVI.setup_anndata(internal_adata, batch_key="batch", labels_key="cell_type", unlabeled_category="unlabeled")
 
         # Train the model
-        model = scvi.model.SCANVI.from_scvi_model(scvi_model=pretrained_scVI_model, adata=adata_scvi, labels_key="cell_type", unlabeled_category="unlabeled")
+        model = scvi.model.SCANVI.from_scvi_model(scvi_model=pretrained_scVI_model, adata=internal_adata, labels_key="cell_type", unlabeled_category="unlabeled")
         model.train()
         model.save("my_scanvi_model/", overwrite=True)
 
     # Get the batch-corrected latent representation (obsm is a matrix like X where each row is a cell and each column is a feature)
-    adata_scvi.obsm["X_scANVI_corrected"] = model.get_normalized_expression()
+    internal_adata.obsm["X_scANVI_corrected"] = model.get_normalized_expression()
 
-    return adata_scvi, model
+    return internal_adata, model
 
 
 def main(input_data_file, output_dir, max_considered_genes):
