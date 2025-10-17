@@ -259,7 +259,7 @@ def annotate_cell_types(
     Input should be a directory with containing preprocessed h5ad files.
 
     Outputs a gzip compressed h5ad file for each file, with cell type annotations added to each cell.
-    Output files are named {output_prefix}_{basename}.h5ad.
+    Output files are named {output_prefix}_{basename}_{i}.h5ad.
 
     Annotations added to adata.obs: [numpy.float32: "<cell_type>_score", str: "cell_type"] 
     (score for each cell type denoted in the marker file, chosen cell type for each cell)
@@ -312,10 +312,96 @@ def annotate_cell_types(
 
     return output_file_list
 
-def correct_batch_effects(input_data_dir: str):
-    """ WIP; DOES NOT WORK
-    Run Batch_correction.py on a given directory of preprocessed h5ad files.
-    Creates necessary directories if not present. Saves output permanenlty if specified."""
+
+def aggregate_batches(
+        input_data_dir: str,  
+        max_obs_cancerous: int = None,
+        max_obs_non_cancerous: int = None,
+        save_output: bool = False, 
+        input_prefix: str = "cell_type_annotated",
+        output_prefix: str = "aggregated",
+        verbose: bool = False) -> list[str]:
+    """ 
+    Runs batch_aggregation.py on input_data_dir to create a single
+    aggregated h5ad file from all contained h5ad files. Keeps all obs annotations.
+    Tries to keep all present var annotations, but leaves out those that have non 
+    unique var_name -> value mappings. 
+
+    Input should be a directory with containing h5ad files that should be aggregated into one.
+
+    Outputs a gzip compressed aggregated h5ad file.
+    Output files are named {output_prefix}_{basename}.h5ad. (index is omitted because of aggregation)
+
+    Annotations that are added to adata.obs: [str: "batch", str: "cancer_state"] (orginal batch of cell, whether cell is cancerous or not)
+
+    Parameters:
+        input_data_dir (str): path to directory containing h5ad files to annotate.
+        use_ensembl_ids (bool, optional): whether ensembl ids have been used for gene names. Defaults to True.
+        save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/cell_type_annotated. Defaults to False.
+        input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "preprocessed".
+        output_prefix (str, optional): prefix for output file names. Defaults to "cell_type_annotated".
+        verbose (bool, optional): whether to print verbose output from subprocess. Defaults to False.
+
+    Returns:
+        list[str]: list of paths to output files
+    """
+
+    #check if OUTCOME_STORAGE_DIR and TEMP_DIR have cell_type_annotated folder, if not create it
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "aggregated"), exist_ok=True)
+    os.makedirs(os.path.join(TEMP_DIR, "aggregated"), exist_ok=True)
+
+    # assign directories for temporary and permanent storage
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "aggregated")
+    output_temp_dir = os.path.join(TEMP_DIR, "aggregated")
+
+    # assign output file list
+    output_file_list = []
+
+    # run script on each file in input_data_dir
+    print("Aggregating files in " + os.path.basename(input_data_dir))
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "batch_aggregation.py"), input_data_dir, output_temp_dir, [max_obs_cancerous, max_obs_non_cancerous, input_prefix, output_prefix, verbose])
+    
+    # naming happens in subprocess as it relies on the isolated cancer type (extracted from filename)
+
+    # add output file to output_file_list
+    output_file_list.append(temp_output_path)
+
+    # if specified, permanently store a copy of the temporary output file
+    if save_output == True:
+        for file in os.listdir(output_temp_dir):
+            shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, file))
+
+    return output_file_list
+
+def correct_batch_effects(
+        input_data_file: str,
+        max_considered_genes: int = 1000,
+        save_output: bool = False,
+        input_prefix: str = "aggregated",
+        output_prefix: str = "batch_corrected",
+        verbose: bool = False) -> list[str]:
+    """
+    Runs Batch_correction.py on an aggregated h5ad file to correct batch effects.
+
+    Input should be an aggregated h5ad file.
+
+    Outputs a gzip compressed corrected h5ad file with batch corrected representations.
+    Output files are named {output_prefix}_{basename}.h5ad.
+
+    Annotations added to adata.obsm: [pandas.DataFrame: "X_scVI_corrected", pandas.DataFrame: "X_scANVI_corrected"]
+
+    Parameters:
+        input_data_file (str): path to aggregated h5ad file to correct.
+        max_considered_genes (int, optional): maximum number of highly variable genes to consider for model training. Defaults to 1000.
+            if this is set to "all", scVI and scANVI will be run on the full geneset (might take a long time).
+        save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/batch_corrected. Defaults to False.
+        input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "aggregated".
+        output_prefix (str, optional): prefix for output file names. Defaults to "batch_corrected".
+        verbose (bool, optional): whether to print verbose output from subprocess. Defaults to False.
+
+    Returns:
+        list[str]: list of paths to output files
+    """
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
     os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected"), exist_ok=True)
@@ -324,15 +410,26 @@ def correct_batch_effects(input_data_dir: str):
     # assign directories for temporary and permanent storage
     output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected")
     output_temp_dir = os.path.join(TEMP_DIR, "batch_corrected")
+    
+    # assign output file list
+    output_file_list = []
 
     # run script and assign path to temporary output file
-    print(f"Correcting batch effects in {input_data_dir}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Batch_correction.py"), input_data_dir, output_temp_dir)
+    print(f"Correcting batch effects in {input_data_file}")
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Batch_correction.py"), input_data_file, output_temp_dir, [max_considered_genes, verbose])
+
+    # rename output file
+    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix)}.h5ad"))
+    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix)}.h5ad")
+
+    # add output file to output_file_list
+    output_file_list.append(temp_output_path)
 
     # if specified, permanently store a copy of the temporary output file
-    if OUTCOME_STORAGE["Batch_correction.py"] == True:
+    if save_output == True:
         shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
+    return output_file_list
 
 def infer_CNVs(input_data_file: str, reference_genome_path: str, corrected_representation: str = None, verbose: bool = False):
     """ 
@@ -579,14 +676,17 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             preprocess_data(raw_data_dir, mode, use_ensembl_ids=use_ensebml_ids, save_output=False, verbose=True)
             """
         
-        # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), marker_file_path=r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", use_ensembl_ids=use_ensebml_ids, save_output=True, verbose=True)
-        # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"))
+
         # infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_HVG_PDAC.h5ad"), r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", corrected_representation="X_scANVI_corrected", verbose=True)
         # for file in ["annotated_PDAC_cancerous_4.h5ad", "annotated_PDAC_non_cancerous_2.h5ad"]:
-        cluster_and_plot(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\cell_type_annotated\cell_type_annotated__PDAC_cancerous_0.h5ad", ["cell_type"], projection="UMAP", show=True, save_output=True, verbose=True)
+        # cluster_and_plot(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\cell_type_annotated\cell_type_annotated__PDAC_cancerous_0.h5ad", ["cell_type"], projection="UMAP", show=True, save_output=True, verbose=True)
+        aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), save_output=True, verbose=True, input_prefix="preprocessed")
+        # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_PDAC.h5ad"), save_output=True, verbose=True, max_considered_genes=100)
 
         purge_tempfiles()
         sys.exit(0)
     except Exception:
         purge_tempfiles()
         raise # re-raise the exception to see the traceback and error message
+
+
