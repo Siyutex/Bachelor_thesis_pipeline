@@ -236,6 +236,7 @@ def preprocess_data(
 
         # if specified, permanently store a copy of the temporary output file
         if save_output == True:
+            print(f"Saving {temp_output_path} to {output_storage_dir}")
             shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
         i += 1
@@ -308,6 +309,7 @@ def annotate_cell_types(
 
         # if specified, permanently store a copy of the temporary output file
         if save_output == True:
+            print(f"Saving {temp_output_path} to {output_storage_dir}")
             shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
     return output_file_list
@@ -368,6 +370,7 @@ def aggregate_batches(
     # if specified, permanently store a copy of the temporary output file
     if save_output == True:
         for file in os.listdir(output_temp_dir):
+            print(f"Saving {file} to {output_storage_dir}")
             shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, file))
 
     return output_file_list
@@ -418,14 +421,15 @@ def correct_batch_effects(
     temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Batch_correction.py"), input_data_file, output_temp_dir, [max_considered_genes, verbose])
 
     # rename output file
-    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}.h5ad"))
-    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}.h5ad")
+    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}"))
+    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}")
 
     # add output file to output_file_list
     output_file_list.append(temp_output_path)
 
     # if specified, permanently store a copy of the temporary output file
     if save_output == True:
+        print(f"Saving {temp_output_path} to {output_storage_dir}")
         shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
     return output_file_list
@@ -441,11 +445,11 @@ def infer_CNVs(
         output_prefix: str = "CNV_inferred",
         verbose: bool = False) -> list[str]:
     """ 
-    Infer copy number variations from an aggregated / batch corrected h5ad file.
+    Infer copy number variations from any aggregated h5ad file.
     This works much better with with larger genesets, because it uses a sliding 
     window to pass over genes that are close on the chromosome.
 
-    Input should be an aggregated / batch corrected h5ad file.
+    Input should be an h5ad file, batch corrected if corrected_representation is passed, cell type annotated if cell_type is passed.
 
     Requires the following annotations to be present:
         - if cell_type is passed, adata.obs["cell_type"] (from cell_type_annotation.py)
@@ -455,7 +459,8 @@ def infer_CNVs(
     Outputs a gzip compressed corrected h5ad file with CNV annotations.
     Output files are named {output_prefix}_{basename}.h5ad.
 
-    Annotations added to adata.obs: []
+    Annotations added to adata.obs: [numpy.float64:"summed_cnvs"] (number of CNVs in a cell)
+    Annotations added to adata.obsm: [scipy.sparse._csr.csr_matrix[numpy.float64]:"{corrected_representation}_cnv", numpy.ndarray[numpy.float64]:"{corrected_representation}_gene_values_cnv"] (smoothed and denoised gene expression along genomic locations, number of copies per gene)
 
     Paramaeters:
         input_data_file (str): path to aggregated / batch corrected h5ad file.
@@ -485,25 +490,52 @@ def infer_CNVs(
     output_file_list = []
 
     # run script and assign path to temporary output file
-    print(f"Inferring GRN from {input_data_file}")
+    print(f"Inferring CNVs from {input_data_file}")
     temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "infer_CNV.py"), input_data_file, output_temp_dir, [reference_genome_path, corrected_representation, cell_type, verbose])
 
     # rename output file
-    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}.h5ad"))
-    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}.h5ad")
+    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}"))
+    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}")
 
     # add output file to output_file_list
     output_file_list.append(temp_output_path)
 
     # if specified, permanently store a copy of the temporary output file
     if save_output == True:
+        print(f"Saving {temp_output_path} to {output_storage_dir}")
         shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
 
-def infer_pseudotime(input_data_file: str, verbose: bool = False):
+def infer_pseudotime(
+        input_data_file: str, 
+        corrected_representation: str = None,
+        save_output: bool = False,
+        input_prefix: str = "CNV_inferred",
+        output_prefix: str = "pseudotime_inferred",
+        verbose: bool = False) -> list[str]:
     """ 
-    Infer pseudotime from a given aggregated / batch corrected h5ad file.
-    Adds adata.obs["dpt_pseudotime"]
+    Infer pseudotimefrom a CNV inferred h5ad file. Chooses the cell with least CNVs as root cell.
+
+    Input should be a CNV inferred h5ad file. CNVs are necessary for root cell selection.
+
+    Requires the following annotations to be present:
+        - adata.obsm[f"{corrected_representation}_gene_values_cnv"] (from infer_CNV.py)
+
+    Outputs a gzip compressed h5ad with pseudotime annotated for each cell. 
+    Output files are named {output_prefix}_{basename}.h5ad.
+
+    Annotations added to adata.obs: adata.obs['dpt_pseudotime']: pandas.Series (dtype float) (pseudotime value for each cell)
+
+    Parameters:
+        input_data_file (str): path to aggregated / batch corrected h5ad file.
+        corrected_representation (str, optional): name of corrected representation that was used to infer CNVs.
+        save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/CNV. Defaults to False.
+        input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "batch_corrected".
+        output_prefix (str, optional): prefix for output file names. Defaults to "CNV_inferred".
+        verbose (bool, optional): whether to print verbose output from subprocess. Defaults to False.
+
+    Return:
+        list[str]: list of paths to output files
     """
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
@@ -514,14 +546,26 @@ def infer_pseudotime(input_data_file: str, verbose: bool = False):
     output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "pseudotime")
     output_temp_dir = os.path.join(TEMP_DIR, "pseudotime")
 
+    # assign output file list
+    output_file_list = []
+
     # run script and assign path to temporary output file
-    print(f"Inferring GRN from {input_data_file}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "pseudotime_inference.py"), input_data_file, output_temp_dir, [verbose])
+    print(f"Inferring pseudotime from {input_data_file}")
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "pseudotime_inference.py"), input_data_file, output_temp_dir, [corrected_representation, verbose])
+
+    # rename output file
+    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}"))
+    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}")
+
+    # add output file to output_file_list
+    output_file_list.append(temp_output_path)
 
     # if specified, permanently store a copy of the temporary output file
-    if OUTCOME_STORAGE["pseudotime_inference.py"] == True:
+    if save_output == True:
+        print(f"Saving {temp_output_path} to {output_storage_dir}")
         shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
+    return output_file_list
 
 def cluster_and_plot(
         input_data_dir: str, 
@@ -677,8 +721,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_PDAC.h5ad"), save_output=True, verbose=True, max_considered_genes=100)
         # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", use_ensembl_ids=use_ensebml_ids, verbose=True)
         # aggregated_file = aggregate_batches(os.path.join(TEMP_DIR, "cell_type_annotated"), save_output=True, verbose=True)[0]
-        infer_CNVs(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\aggregated\aggregated_PDAC.h5ad", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", save_output=True, input_prefix="aggregated", verbose=True, cell_type="ductal_cell")
-
+        # infer_CNVs(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\aggregated\aggregated_PDAC.h5ad", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", save_output=True, input_prefix="aggregated", verbose=True, cell_type="ductal_cell")
+        infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC.h5ad"), verbose=True, corrected_representation=None, save_output=True)
 
 
         purge_tempfiles()

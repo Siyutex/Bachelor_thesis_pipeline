@@ -5,24 +5,20 @@ import scanpy as sc
 import helper_functions as hf
 import os
 import numpy as np
+from scipy.sparse import issparse
 
-if __name__ == "__main__":
-    # import cmd args
-    input_data_file, output_data_dir, verbose = hf.import_cmd_args(3)
-    vprint = hf.make_vprint(verbose)
 
-    PREFIX = "cnv_"
-
-    # import adata
-    adata = sc.read_h5ad(input_data_file)
-
+def check_normalize(adata):
     # normalize if not already
     if not hf.is_normalized(adata):
         vprint("Normalizing adata...")
         sc.pp.normalize_total(adata, target_sum=1e4)
     else:
         vprint("adata is already normalized, skipping normalization...")
-    
+
+
+def prepare_for_pseudotime(adata):
+
     # compute PCA embedding (needed for neihbor graph), adds adata.obsm["X_pca"]
     vprint("Computing PCA embedding...")
     sc.pp.pca(adata, n_comps=50, svd_solver="arpack")
@@ -36,54 +32,88 @@ if __name__ == "__main__":
     vprint("Computing diffmap...")
     sc.tl.diffmap(adata, n_comps=15)
 
-    # annotate root cells (do least cnvs, ductal, non cancerous and maybe some other criteria)
-    # should be cancaer_state == non_cancerous, ductal_cell, and cnvs of choosen cell for all genes as close as possible to median cnvs of ductal+nc
-    # CURRENT ISSUE: to many nans in gene_values_cnv bcs inferCNV needs densly packed gene set per chromosome (but we only use HVGs atm)
-    vprint("Annotating root cell...")
-    adata.uns["iroot"] = np.flatnonzero(adata.obs["cell_type"] == "ductal_cell")[0] # choose first ductal cell
 
-
-    # fix smth like this
+def annotate_root_cell(adata, corrected_representation):
     """
+    Returns index of root cell
+    """
+
     # filter adata, use copy() to create new objects, not vies; assign to same name so old adata gets overridden and garbage collected
-adata = adata[adata.obs["cell_type"] == "ductal_cell", :].copy()
-adata = adata[adata.obs["cancer_state"] == "non_cancerous", :].copy()
+    vprint("Filtering adata for non_cancerous ductal cells")
+    adata = adata[adata.obs["cell_type"] == "ductal_cell", :].copy()
+    adata = adata[adata.obs["cancer_state"] == "non_cancerous", :].copy()
 
-if issparse(adata.layers["gene_values_cnv"]):
-    X = np.array(adata.layers["gene_values_cnv"])
-elif type(adata.layers["gene_values_cnv"]) == np.ndarray:
-    X = adata.layers["gene_values_cnv"]
+    if issparse(adata.obsm[f"{corrected_representation}_gene_values_cnv"]):
+        X = np.array(adata.obsm[f"{corrected_representation}_gene_values_cnv"])
+    elif type(adata.obsm[f"{corrected_representation}_gene_values_cnv"]) == np.ndarray:
+        X = adata.obsm[f"{corrected_representation}_gene_values_cnv"]
 
-# compute median cnv number for each gene in those cells
-median_cnvs = np.median(X, axis=0)
-print(f"Median cnvs: {median_cnvs[:5]}")
+    # filter out NaN genes (inferCNV does not assign some genes a CNV value, if it skips over them with the sliding window)
+    vprint("Filtering out NaN genes...")
+    nan_columns = np.isnan(X).all(axis=0)
+    X = X[:, ~nan_columns]
 
-# now find cell where sum(abs(median_cnvs - cnvs)) is smallest for all genes
-# compute per-cell L1 deviation from median
+    # compute mean cnv value for each cell
+    vprint("Computing mean cnvs...")
+    mean_cnvs = np.mean(X, axis=1)
+    print(f"Mean cnvs: {mean_cnvs[:5]}")
 
-print((X - median_cnvs)[:5, :5])
-print(np.abs(X - median_cnvs)[:5, :5])
+    # find index of cell with smallest mean cnv (might be the least canncerous cell)
+    vprint("Determining best root cell...")
+    best_cell_idx = np.argmin(mean_cnvs)
 
-deviations = np.sum(np.abs(X - median_cnvs), axis=1)
-print(f"Deviations: {deviations[:5]}")
+    print(f"Best cell index: {best_cell_idx}")
 
-# find index of cell with smallest total deviation
-best_cell_idx = np.argmin(deviations)
-    """
+    return best_cell_idx
+
+
+def main(input_data_file, output_data_dir, corrected_representation):
+
+
+
+    internal_adata = adata.copy()
+
+    # check normalization, if not already done, normalize
+    print("Checking normalization...")
+    check_normalize(internal_adata)
+
+    # prepare (pca, neighbors, diffmap) for pseudotime inference
+    print("Adding necessary fields for pseudotime inference...")
+    prepare_for_pseudotime(internal_adata)
+
+    # annotate root cell
+    print("Annotating root cell...")
+    root_idx = annotate_root_cell(internal_adata, corrected_representation)
+    adata.uns["iroot"] = root_idx
+    internal_adata.uns["iroot"] = root_idx
 
     # compute pseudotime (uses diffusion distances to get pseudotime, and automatically uses default fields created by neighbors)
     # adds annotations to adata.obs["dpt_pseudotime"]
-    vprint("Computing pseudotime...")
-    sc.tl.dpt(adata, n_dcs=15)
+    print("Computing pseudotime...")
+    sc.tl.dpt(internal_adata, n_dcs=15)
 
+    # add pseudotime to actual adata
+    adata.obs["dpt_pseudotime"] = internal_adata.obs["dpt_pseudotime"]
 
-    # TESTING
-    sc.pl.scatter(adata, x="dpt_pseudotime", y="summed_cnvs", title="CNV vs pseudotime")
+    # PLOTTING
+    # sc.pl.scatter(adata, x="dpt_pseudotime", y="summed_cnvs", title="CNV vs pseudotime")
 
+    # save results
+    print("Saving results...")
+    adata.write(os.path.join(output_data_dir, os.path.basename(input_data_file)), compression="gzip")
+    print("Output: " + os.path.join(output_data_dir, os.path.basename(input_data_file)))
 
-    # export adata
-    vprint("Exporting adata...")
-    adata.write(os.path.join(output_data_dir, "pseudotime_" + os.path.basename(input_data_file).removeprefix(PREFIX)), compression="gzip")
+if __name__ == "__main__":
+    # import cmd args
+    input_data_file, output_data_dir, corrected_representation, verbose = hf.import_cmd_args(4)
+    vprint = hf.make_vprint(verbose)
 
-    # foward the path to the temporary file to the executor script via stdout
-    print("Output: " + os.path.join(output_data_dir, "pseudotime_" + os.path.basename(input_data_file).removeprefix(PREFIX)))
+    # import adata
+    adata = sc.read_h5ad(input_data_file)
+
+    if corrected_representation == None:
+        corrected_representation = "X"
+
+    main(input_data_file, output_data_dir, corrected_representation)
+
+    

@@ -11,3 +11,5 @@ GRN_rule_inference:
     even in target (really in all) genes. 
 Cell_type_annotation:
   - might not be very accurate (eg neurons included in epithelial), check by clustering epi isolated
+Pseudotime: 
+  - smallest mean cnv might not be the best proxy for a "normal" cell as the root cell

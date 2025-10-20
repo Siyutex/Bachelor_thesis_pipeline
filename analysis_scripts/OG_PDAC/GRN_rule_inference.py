@@ -227,7 +227,7 @@ for target, edge_set in edge_sets.items():
         vprint(f"creating constant rule for {target}")
         bnet_rules.append(f"{target}, 0")
     elif "class: 0" not in rules:
-        vprint(f"No activation function for {target}, all paths lead to activation")
+        vprint(f"No deactivation function for {target}, all paths lead to activation")
         vprint(f"creating constant rule for {target}")
         bnet_rules.append(f"{target}, 1")
     elif "class: 1" in rules:
