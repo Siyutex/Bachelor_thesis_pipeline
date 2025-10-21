@@ -4,9 +4,6 @@
     "SOX9",
     "MUC1",
     "EPCAM",
-    "KRT8",
-    "KRT18",
-    "KRT19",
     "CDH1"
   ],
   "acinar_cell": [
@@ -17,9 +14,6 @@
     "AMY2A/B",
     "CELA3A",
     "EPCAM",
-    "KRT8",
-    "KRT18",
-    "KRT19",
     "CDH1"
   ],
   "alpha-cell": [
@@ -97,5 +91,17 @@
     "ACTA2",
     "PDGFRB",
     "RGS5"
+  ],
+  "erythrocyte": [
+    "HBA1",
+    "HBA2",
+    "HBB",
+    "SLC4A1",
+    "GYPA",
+    "ALAS2",
+    "AHSP",
+    "TFRC",
+    "GATA1",
+    "KLF1"
   ]
 }

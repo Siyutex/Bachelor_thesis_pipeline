@@ -10,9 +10,8 @@ import json
 import numpy as np
 from scipy import sparse
 import pandas as pd
-from matplotlib import pyplot as plt
 import helper_functions as hf
-
+import scvi
 
 
 
@@ -25,8 +24,12 @@ def annotate_markers_z_score(adata, cutoff_unsure, cutoff_other):
     # scale because of 0 mean and counting stdevs instead of counts
 
     internal_adata = adata.copy() # so we don't modify the .X of the real data, because it is needed downstream
-    vprint("Normalizing adata...")
-    sc.pp.normalize_total(internal_adata, target_sum= 1e4)
+    
+    if not hf.is_normalized(internal_adata):
+        vprint("Normalizing adata...")
+        sc.pp.normalize_total(internal_adata, target_sum= 1e4)
+    else:
+        vprint("adata is already normalized")
     
     # get z scores for each gene
     vprint("Getting z scores for each gene...")
@@ -51,6 +54,20 @@ def annotate_markers_z_score(adata, cutoff_unsure, cutoff_other):
             adata.obs[celltype + "_score"] = marker_levels.mean(axis=1) # want to add scores to actual adata
         else:
             adata.obs[celltype + "_score"] = np.zeros(adata.shape[0])
+
+    # negative selection
+    vprint("Correcting scores by negative markers...")
+    for celltype, negative_marker_list in NEGATIVE_MARKER_LISTS.items():
+        if use_ensembl_ids:
+            negative_marker_levels = internal_adata[:, internal_adata.var["gene_symbols"].isin(negative_marker_list)]
+        else:
+            negative_marker_levels = internal_adata[:, internal_adata.var_names.isin(negative_marker_list)]
+        negative_marker_levels = np.array(negative_marker_levels.X.todense())
+
+        if marker_levels.size != 0:
+            adata.obs[celltype + "_score"] -= marker_levels.mean(axis=1) # want to add scores to actual adata
+        else:
+            adata.obs[celltype + "_score"] -= np.zeros(adata.shape[0])
 
     adata.obs['cell_type'] = None
     score_columns = [key + "_score" for key in MARKER_LISTS.keys()]
@@ -77,6 +94,60 @@ def annotate_markers_z_score(adata, cutoff_unsure, cutoff_other):
 
     return None
 
+
+def annotate_markers_cellassign(adata, use_ensembl_ids):
+    
+    vprint("Creating dataframe of marker lists...")
+    # first make 1 pandas series per key (cell type) in the dict, list values (marker genes) will be the indexes, values will be 1
+    marker_series_dict = {key: pd.Series(data=1, index=value) for key, value in MARKER_LISTS.items()}
+    # now concatenate into dataframe (one column per series), fill missing values in each column (ie genes that are not markers for that cell type) with 0
+    marker_df = pd.concat(marker_series_dict, axis=1).fillna(0)
+
+    # create internal adata, to avoid modifying the real data
+    internal_adata = adata.copy()
+
+    # change internal adata var names to gene symbols, if ensembl ids were used (needed for cellassign)
+    if use_ensembl_ids:
+        internal_adata.var_names = internal_adata.var["gene_symbols"]
+
+    # compute size factor (ratio of a cell's UMI counts to average cell's counts)
+    lib_size = adata.X.sum(1)
+    internal_adata.obs["size_factor"] = lib_size / np.mean(lib_size)
+
+    # subset adata to only include marker genes
+    vprint("Subsetting adata to only include marker genes...")
+    internal_adata = internal_adata[:, internal_adata.var_names.isin(marker_df.index)].copy()
+    vprint(f"Subset shape: {internal_adata.shape}")   
+
+    # reformat X to csr matrix to make training faster
+    internal_adata.X = sparse.csr_matrix(internal_adata.X)
+   
+    # assign a saved cellassign model if it exists
+    try:
+        model = scvi.external.CellAssign.load("my_cellassign_model/", internal_adata)
+    except Exception as e:
+        print("No fitting cellassign model found. Training a new one...")
+        print(f"Model loading failed because of Exception: {e}")
+        model = None
+        pass
+
+    # otherwise, train a new cellassign model
+    if model is None:
+        vprint("Setting up cellassign...")
+        scvi.external.CellAssign.setup_anndata(internal_adata, size_factor_key="size_factor")
+        model = scvi.external.CellAssign(internal_adata, cell_type_markers=marker_df)
+        vprint("Training model...")
+        model.train()
+        model.save("my_cellassign_model/", overwrite=True)
+
+    # predict cell types
+    predictions = model.predict()
+
+    # add predictions to adata
+    adata.obs["cell_type"] = predictions.idxmax(axis=1).values
+    print(adata.obs["cell_type"][:5])
+
+    return None
 
 def display_fractions(adata):
     # display global fraction of each cell type as dataframe
@@ -118,19 +189,31 @@ def save_outcome(adata):
 if __name__ == "__main__":
 
     # import cmd args
-    input_data_file, output_data_dir, marker_file_path, cutoff_unsure, cutoff_other, use_ensembl_ids, verbose = hf.import_cmd_args(5)
+    input_data_file, output_data_dir, use_ensembl_ids, marker_file_path, negative_marker_file_path, model, cutoff_unsure, cutoff_other, verbose = hf.import_cmd_args(9)
     vprint = hf.make_vprint(verbose)
 
+    # set marker lists as global var
     with open(marker_file_path) as f:
         MARKER_LISTS = json.load(f)
+
+    # set negative marker lists as global var, if present and needed
+    if negative_marker_file_path is not None:
+        with open(negative_marker_file_path) as f:
+            NEGATIVE_MARKER_LISTS = json.load(f)
+    elif negative_marker_file_path is None and model == "z_score":
+        print("Running z_score without negative markers...")
+        NEGATIVE_MARKER_LISTS = {}
 
     # import input data into anndata object (handles compressed h5ad files as well)
     print("Reading data...")
     adata = sc.read_h5ad(input_data_file)
 
-    print("Annotating cell types...")
-    annotate_markers_z_score(adata, cutoff_unsure, cutoff_other) # second highest score has to be lower than cutoff unsure (eg 0.8 = 80%) of highest to be sure, any score has to be at least above cutoff other (eg 0.2) stdevs below the mean for that score among all cells
-    
+    if model == "z_score":
+        print("Annotating cell types using z score...")
+        annotate_markers_z_score(adata, cutoff_unsure, cutoff_other) # second highest score has to be lower than cutoff unsure (eg 0.8 = 80%) of highest to be sure, any score has to be at least above cutoff other (eg 0.2) stdevs below the mean for that score among all cells
+    elif model == "cellassign":
+        print("Annotating cell types using Cellassign...")
+        annotate_markers_cellassign(adata, use_ensembl_ids)
 
     print("Displaying fractions...")
     display_fractions(adata)

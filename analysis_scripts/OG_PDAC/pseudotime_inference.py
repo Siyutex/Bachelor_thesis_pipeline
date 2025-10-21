@@ -53,14 +53,32 @@ def annotate_root_cell(adata, corrected_representation):
     nan_columns = np.isnan(X).all(axis=0)
     X = X[:, ~nan_columns]
 
-    # compute mean cnv value for each cell
+    """# compute mean cnv value for ea
     vprint("Computing mean cnvs...")
     mean_cnvs = np.mean(X, axis=1)
-    print(f"Mean cnvs: {mean_cnvs[:5]}")
+    print(f"Mean cnvs: {mean_cnvs[:5]}")"""
 
-    # find index of cell with smallest mean cnv (might be the least canncerous cell)
+
+
+
+    # compute mean cnv for each gene
+    vprint("Computing mean cnvs per gene...")
+    median_cnvs_per_gene = np.median(X, axis=0)
+    
+    # compute sum of abs deviation of cnv from mean cnv for each cell
+    vprint("Computing sum of abs deviation of cnv from mean cnv per cell...")
+    sum_abs_dev = np.sum(np.abs(X - median_cnvs_per_gene), axis=1)
+
+    best_cell_idx = np.argmin(sum_abs_dev)
+
+
+
+
+
+
+    """# find index of cell with smallest mean cnv (might be the least canncerous cell)
     vprint("Determining best root cell...")
-    best_cell_idx = np.argmin(mean_cnvs)
+    best_cell_idx = np.argmin(mean_cnvs)"""
 
     print(f"Best cell index: {best_cell_idx}")
 
@@ -69,8 +87,7 @@ def annotate_root_cell(adata, corrected_representation):
 
 def main(input_data_file, output_data_dir, corrected_representation):
 
-
-
+    # import adata
     internal_adata = adata.copy()
 
     # check normalization, if not already done, normalize

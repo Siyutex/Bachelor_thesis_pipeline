@@ -246,8 +246,10 @@ def preprocess_data(
 
 def annotate_cell_types(
         input_data_dir: str, 
-        marker_file_path: str, 
         use_ensembl_ids: bool, 
+        marker_file_path: str, 
+        negative_marker_file_path: str = None,
+        model: Literal["z_score","cellassign"] = "z_score",
         cutoff_unsure: float = 0.8, 
         cutoff_other: float = -0.2, 
         save_output: bool = False, 
@@ -256,20 +258,35 @@ def annotate_cell_types(
         verbose: bool = False) -> list[str]:
     """ 
     Loops through input_data_dir and runs Cell_type_annotation.py on each contained h5ad file.
+    Depending on the model paramter, either z_score or cellassign will be used.
+    Z_score gets the z score of all genes after normalization, then sums up the z scores for
+    set of marker corresponding to a cell type, cutoff unsure and cutoff other are then used to assign identities.
+    Cellassign uses cellassign from scvitools to predict cell types: https://docs.scvi-tools.org/en/1.3.3/user_guide/models/cellassign.html
 
     Input should be a directory with containing preprocessed h5ad files.
+
+    Required annotations:
+        - adata.obs["n_counts"], if model is cellassign (used as internal model parameter)
 
     Outputs a gzip compressed h5ad file for each file, with cell type annotations added to each cell.
     Output files are named {output_prefix}_{basename}_{i}.h5ad.
 
-    Annotations added to adata.obs: [numpy.float32: "<cell_type>_score", str: "cell_type"] 
-    (score for each cell type denoted in the marker file, chosen cell type for each cell)
+    Conditional annotations added to adata.obs: 
+    - if model is z_score:
+        [numpy.float32: "<cell_type>_score", str: "cell_type"] 
+        (score for each cell type denoted in the marker file, chosen cell type for each cell)
+    - if model is cellassign:
+        [str: "cell_type"]
+        (ratio of a cell's UMI counts to average cell's counts, cell type prediction for each cell)
 
     Parameters:
         input_data_dir (str): path to directory containing h5ad files to annotate.
+        use_ensembl_ids (bool): whether ensembl ids have been used for gene names.
         marker_file_path (str): path to file with marker genes for each cell type.
             This should be a json with cell type names as keys and lists of marker gene symbols as values.
-        use_ensembl_ids (bool): whether ensembl ids have been used for gene names.
+        negative_marker_file_path (str, optional): path to file with negative marker genes for each cell type.
+            This should be a json with cell type names as keys and lists of marker gene symbols as values.
+        model (Literal["z_score","cellassign"], optional): which model to use. Defaults to "z_score".
         cutoff_unsure (float, optional): a value between 0 and 1, specifying how high the second highest 
             score can at most be relative to the highest to still annotate a well defined cell type
             Defaults to 0.8 (0.8 times highest score).
@@ -298,7 +315,7 @@ def annotate_cell_types(
     # run script on each file in input_data_dir
     for file in os.listdir(input_data_dir):
         print("Annotating cell types for: " + file)
-        temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Cell_type_annotation.py"), os.path.join(input_data_dir, file), output_temp_dir, [marker_file_path, cutoff_unsure, cutoff_other, use_ensembl_ids, verbose])
+        temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Cell_type_annotation.py"), os.path.join(input_data_dir, file), output_temp_dir, [use_ensembl_ids, marker_file_path, negative_marker_file_path, model, cutoff_unsure, cutoff_other, verbose])
         
         # rename output file
         os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{file.removeprefix(input_prefix + "_")}"))
@@ -568,22 +585,27 @@ def infer_pseudotime(
     return output_file_list
 
 def cluster_and_plot(
-        input_data_dir: str, 
+        input_data_file: str, 
         obs_annotations: list[str], 
-        layer: str = "X", # X for raw representation, any value of adata.layers
-        projection: Literal["UMAP", "PCA"]  = "UMAP", 
+        obsm_layer: str = "X", # X for raw representation, any value of adata.layers
+        projection: Literal["UMAP", "PCA"]  = "UMAP",
+        cell_type: str = None, 
+        root_cell_idx: int = None,
         show: bool = True,
         save_output: bool = False,
         verbose: bool = False) -> None:
     
     """
-    Creates cluster plots (UMAP / PCA) of cells in input_data_dir. One plot per obs annotation (eg one plot for cell type clusters, ...).
-    Also computes DEGs between clusters and pritns to stdout.
+    Creates cluster plots (UMAP / PCA) of cells in input_data_file. One plot per obs annotation (eg one plot for cell type clusters, ...).
+    Also computes DEGs between clusters and pritns to stdout. Also plots a pseudotime and CNV plots if pseudotime is inferrred.
 
     Input should be an h5ad file with obs annotations for each cell that should be used for clustering.
 
+    Annoations that need to be present:
+        - if cell_type is passed, adata.obs["cell_type"] (from cell_type_annotation.py)
+
     Outputs one png file for each obs annotation containing a cluster plot.
-    Output files are named {UMAP|PCA}_colored_by_{obs_annotation}_for_{basename}.png.
+    Output files are named {UMAP|PCA}_colored_by_{obs_annotation}_for_{basename}.png and CNV_vs_pseudotime_for_{basename}.png
 
     Does not add annotations, as it does not return an h5ad file.
 
@@ -592,6 +614,8 @@ def cluster_and_plot(
         obs_annotations (list[str]): list of obs annotations to cluster. eg ["cell_type", "tissue"]
         layer (str, optional): anndata layer to use for clustering. Defaults to "X" (raw representation).
         projection (literal ["UMAP", "PCA"], optional): projection to use for clustering. Defaults to "UMAP".
+        cell_type (str, optional): Name of the cell type in the cell_type column that should be isolated before plotting.
+        root_cell_idx (int, optional): Index of the root cell of pseudotime. Will be highlighted in pseudotime scatterplot.
         show (bool, optional): whether to show the plots. Defaults to True.
         save_output (bool, optional): whether to save the plots permanently. Defaults to False.
         verbose (bool, optional): whether to print verbose output. Defaults to False.
@@ -609,8 +633,8 @@ def cluster_and_plot(
     output_temp_dir = os.path.join(TEMP_DIR, "plots")
 
     # run script and assign path to temporary output file
-    print(f"Clustering and plotting: {input_data_dir}")
-    hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Clustering.py"), input_data_dir, output_temp_dir, [obs_annotations, layer, projection, show, verbose])
+    print(f"Clustering and plotting: {input_data_file}")
+    hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Plotting.py"), input_data_file, output_temp_dir, [obs_annotations, obsm_layer, projection, cell_type, root_cell_idx, show, verbose])
 
     # naming happens in subprocess (relies on knowing which obs column was used)
 
@@ -717,13 +741,12 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             preprocess_data(raw_data_dir, mode, use_ensembl_ids=use_ensebml_ids, save_output=False, verbose=True)
             """
         
-        # cluster_and_plot(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\cell_type_annotated\cell_type_annotated__PDAC_cancerous_0.h5ad", ["cell_type"], projection="UMAP", show=True, save_output=True, verbose=True)
         # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_PDAC.h5ad"), save_output=True, verbose=True, max_considered_genes=100)
-        # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", use_ensembl_ids=use_ensebml_ids, verbose=True)
-        # aggregated_file = aggregate_batches(os.path.join(TEMP_DIR, "cell_type_annotated"), save_output=True, verbose=True)[0]
-        # infer_CNVs(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\aggregated\aggregated_PDAC.h5ad", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", save_output=True, input_prefix="aggregated", verbose=True, cell_type="ductal_cell")
-        infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC.h5ad"), verbose=True, corrected_representation=None, save_output=True)
-
+        # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensebml_ids, r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\negative_markers.json", model="cellassign", verbose=True, save_output=True)
+        #aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), save_output=True, verbose=True)
+        #infer_CNVs(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\aggregated\aggregated_PDAC.h5ad", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", save_output=True, input_prefix="aggregated", verbose=True, cell_type="ductal_cell")
+        # infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC.h5ad"), verbose=True, corrected_representation=None, save_output=True)
+        cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "pseudotime", "pseudotime_inferred_PDAC.h5ad"), ["cancer_state"], projection="UMAP", cell_type="ductal_cell", show=True, save_output=False, verbose=True, root_cell_idx=14)
 
         purge_tempfiles()
         sys.exit(0)
