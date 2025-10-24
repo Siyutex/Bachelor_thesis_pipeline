@@ -4,6 +4,7 @@
 # adata.obsm["{representation}_gene_values_cnv"] = number of copies per gene
 # adata.obs["summed_cnvs"] = summed number of gene copies for all genes per cell (cancer cells should be more than normal cells)
 # adata.obsm["{representation}_cnv"] = smoothed and denoised gene expression along genomic locations
+# adata.obs["cnv_score"] = cnv score of leiden clusters (see inferCNVpy.tl.cnv_score)
 
 import infercnvpy as cnv
 import helper_functions as hf
@@ -111,9 +112,17 @@ def main(input_data_file, output_data_dir, refernce_genome_path, corrected_repre
     print("Assigning chromosomal coordinates...")
     assign_chromosomal_coordinats(internal_adata, refernce_genome_path)
 
-    # infer CNV
+    # infer CNVs
     print("Inferring CNV...")
     cnv.tl.infercnv(internal_adata, reference_key="cancer_state", reference_cat="non_cancerous", calculate_gene_values=True, key_added="cnv") # reference of which cells are normal and should not have CNVs (from annotated input data)
+
+    # get cnv score for each cluster of cells (high score = prbly aneuploidy)
+    # first cnv: pca, neighbours, leiden (all of these use scanpy default values in the underlying function)
+    cnv.tl.pca(internal_adata) # uses obsm["X_{use_rep}"] -> so just the smoothed, denoised, cell comparable log fold changes in gene expression over the reference
+    cnv.pp.neighbors(internal_adata)
+    cnv.tl.leiden(internal_adata)
+
+    cnv.tl.cnv_score(internal_adata) # mean absolute values of X_cnv of each cluster (so mean across all cells from that cluster)
 
     # add additional annotations
     print("Adding additional annotations...")
@@ -124,10 +133,12 @@ def main(input_data_file, output_data_dir, refernce_genome_path, corrected_repre
         adata.obsm[f"{corrected_representation}_cnv"] = internal_adata.obsm["X_cnv"]
         adata.obsm[f"{corrected_representation}_gene_values_cnv"] = internal_adata.layers["gene_values_cnv"]
         adata.obs["summed_cnvs"] = internal_adata.obs["summed_cnvs"]
+        adata.obs["cnv_score"] = internal_adata.obs["cnv_score"]
     else:
         adata.obsm["X_cnv"] = internal_adata.obsm["X_cnv"]
         adata.obsm["X_gene_values_cnv"] = internal_adata.layers["gene_values_cnv"] # still add to obsm so downstream processing is uniform
         adata.obs["summed_cnvs"] = internal_adata.obs["summed_cnvs"]
+        adata.obs["cnv_score"] = internal_adata.obs["cnv_score"]
 
     # save results
     print("Saving results...")
