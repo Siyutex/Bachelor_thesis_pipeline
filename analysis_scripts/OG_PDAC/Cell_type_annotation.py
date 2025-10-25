@@ -138,7 +138,7 @@ def annotate_markers_cellassign(adata, use_ensembl_ids):
         model = scvi.external.CellAssign(internal_adata, cell_type_markers=marker_df)
         vprint("Training model...")
         model.train()
-        model.save("my_cellassign_model/", overwrite=True)
+        # model.save("my_cellassign_model/", overwrite=True)
 
     # predict cell types
     predictions = model.predict()
