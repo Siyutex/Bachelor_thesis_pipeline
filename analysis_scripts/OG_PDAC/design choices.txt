@@ -16,6 +16,13 @@ Marker_isolation:
 - cell type assignment:
 	- cutoff unsure: if second highest ranked marker set is >cutoff*highest, then the cell type might also be the second highest ranked one
 	- cutoff other: cells with low expressions on all marker sets are likely in a different category
+- cellassign is a litarture proven method (and works better than z score according to plots)
+
+
+batch_correction
+- log normalization important according to https://docs.scvi-tools.org/en/stable/tutorials/notebooks/use_cases/preprocessing.html#scrna-seq
+- correction procedure done according to https://docs.scvi-tools.org/en/stable/tutorials/notebooks/scrna/harmonization.html
+
 
 GRN_inference:
 !!IMPORTANT!! in arboreto version 0.1.6 there is an issue in core.create_graph: "from_delayed" triggers twice, so comment out / make conditional the second trigger manually

@@ -13,11 +13,28 @@ import helper_functions as hf
 import anndata
 from typing import Tuple
 
+def check_lognormalize(adata):
+    """
+    checks normalization of X, saves to new layer, normalizes that layer if necessary, log1p on new layer
+    new layer: "X_log_normalized"
+    """
 
-def correct_batches_scVI(adata, max_considered_genes) -> Tuple[anndata.AnnData, scvi.model.SCVI]:
+    # copy X to new layer
+    adata.layers["X_log_normalized"] = adata.X.copy()
+
+    if not hf.is_normalized(adata, layer="X_log_normalized"):
+        vprint("Normalizing adata...")
+        sc.pp.normalize_total(adata, target_sum=1e4, layer="X_log_normalized")
+    else:
+        vprint("adata is already normalized")
+    
+    sc.pp.log1p(adata, layer="X_log_normalized")
+
+
+def correct_batches_scVI(adata, max_considered_genes, layer) -> Tuple[anndata.AnnData, scvi.model.SCVI]:
     """
     Correct batches using scVI. Adds a batch-corrected latent representation to `adata.obsm['X_scVI']`.
-    Does internal normalization, so feed raw (filtered) counts.
+    Feed adata with log normalized counts in layer. Optional HVG selection if max_considered_genes is not "all".
 
     Parameters
     ----------
@@ -29,17 +46,13 @@ def correct_batches_scVI(adata, max_considered_genes) -> Tuple[anndata.AnnData, 
     Returns
     -------
     adata : anndata.AnnData
-        Input data with batch-corrected latent representation in `adata.obsm['X_scVI']`
+        new adata with batch-corrected latent representation in `adata.obsm['X_scVI']`
+        X is reduced to HVGs if max_considered_genes is not "all"
     model : scvi.model.SCVI
         The trained scVI model
     """
-    internal_adata = adata.copy()
-
-    if not hf.is_normalized(internal_adata):
-        vprint("Normalizing adata...")
-        sc.pp.normalize_total(internal_adata, target_sum=1e4)
-    else:
-        vprint("adata is already normalized")
+    # create internal adata with X = log normalized, without modifiying the real data
+    internal_adata = hf.matrix_to_anndata(adata, layer=layer)
 
     if max_considered_genes is not "all": # only select HVGs if max_considered_genes is specified as a number
         # do batch aware HVG selection
@@ -118,12 +131,6 @@ def correct_batches_scANVI(adata_scvi, pretrained_scVI_model) -> Tuple[anndata.A
 
     internal_adata = adata_scvi.copy()
 
-    if not hf.is_normalized(internal_adata):
-        vprint("Normalizing adata...")
-        sc.pp.normalize_total(internal_adata, target_sum=1e4)
-    else:
-        vprint("adata is already normalized")
-
     try:
         model = scvi.model.SCANVI.load("my_scanvi_model/", internal_adata)
     except Exception as e:
@@ -152,8 +159,10 @@ def correct_batches_scANVI(adata_scvi, pretrained_scVI_model) -> Tuple[anndata.A
 def main(input_data_file, output_dir, max_considered_genes):
     adata = sc.read_h5ad(input_data_file)
 
-    adata_scvi, scvi_model = correct_batches_scVI(adata, max_considered_genes=max_considered_genes) 
-    corrected_adata, scanvi_model = correct_batches_scANVI(adata_scvi, scvi_model)
+    check_lognormalize(adata) # adds new layer "X_log_normalized"
+
+    adata_scvi, scvi_model = correct_batches_scVI(adata, max_considered_genes=max_considered_genes, layer="X_log_normalized") # does hvg selection if necessary, copies layer to X
+    corrected_adata, scanvi_model = correct_batches_scANVI(adata_scvi, scvi_model) # since first function alrdy checked lognorm and did hvg if wanted, no need to do it again
 
     # carry over the corrected latent representations (later get full gene expression and put into layers)
     adata.obsm["X_scVI_corrected"] = corrected_adata.obsm["X_scVI_corrected"]

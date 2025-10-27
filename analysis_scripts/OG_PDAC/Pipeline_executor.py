@@ -407,8 +407,9 @@ def correct_batch_effects(
 
     Outputs a gzip compressed corrected h5ad file with batch corrected representations.
     Output files are named {output_prefix}_{basename}.h5ad.
-
-    Annotations added to adata.obsm: [pandas.DataFrame: "X_scVI_corrected", pandas.DataFrame: "X_scANVI_corrected"]
+    
+    Annotations added to adata.layers: [dtype(adata.X): "X_log_normalized"] (log1p normalized (total to 1e4) representation of adata.X)
+    Annotations added to adata.obsm: [pandas.DataFrame: "X_scVI_corrected", pandas.DataFrame: "X_scANVI_corrected"] (scVI and scANVI corrected normalized representations)
 
     Parameters:
         input_data_file (str): path to aggregated h5ad file to correct.
