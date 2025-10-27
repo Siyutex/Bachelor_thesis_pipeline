@@ -765,13 +765,13 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
     use_ensebml_ids = True # define whether to use ensembl ids, used for entire pipeline to avoid mismatches
 
     try:
-        """for raw_data_dir in RAW_DATA_DIRS:
-            mode = choose_pipeline_mode(raw_data_dir)
-            preprocess_data(raw_data_dir, mode, use_ensembl_ids=use_ensebml_ids, save_output=True, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0))"""
-        annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensebml_ids, r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\negative_markers.json", model="cellassign", verbose=True, save_output=True)
+
+        mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
+        temp_output_files = preprocess_data(RAW_DATA_DIRS[0], mode, use_ensembl_ids=use_ensebml_ids, save_output=False, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0))
+        # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensebml_ids, r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\negative_markers.json", model="cellassign", verbose=True, save_output=True)
 
         # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_PDAC.h5ad"), save_output=True, verbose=True, max_considered_genes=100)
-        #aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), save_output=True, verbose=True)
+        aggregate_batches(os.path.dirname(temp_output_files[0]), save_output=True, verbose=True)
         # infer_CNVs(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\aggregated\aggregated_PDAC.h5ad", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\gencode.v49.annotation.gtf.gz", save_output=True, input_prefix="aggregated", verbose=True, cell_type="ductal_cell")
         # infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC.h5ad"), verbose=True, corrected_representation=None, save_output=True)
         # cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "pseudotime", "pseudotime_inferred_PDAC.h5ad"), ["projections", "pseudotime_vs_cnv"], layers=["X", "X_cnv"], root_cell_idx=14, marker_file_path=r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", obs_annotations=["cnv_score", "dpt_pseudotime", "cell_type", "summed_cnvs", "cancer_state", "batch"], cell_type="ductal_cell", projection="UMAP", show=True, save_output=False, verbose=True)
