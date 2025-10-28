@@ -98,7 +98,7 @@ def filter_mito_percentage(adata, max_n_MADs, var_names):
 def filter_doublets(adata, expected_doublet_percentage):
 
     # remove doublets using scrublet
-    sc.pp.scrublet(adata, expected_doublet_rate=expected_doublet_percentage) # boolean prediction in .obs['predicted_doublet']
+    sc.pp.scrublet(adata, expected_doublet_rate=expected_doublet_percentage, verbose=verbose) # boolean prediction in .obs['predicted_doublet']
     adata = adata[~adata.obs['predicted_doublet']] # ~ is a bitwise NOT operator, so we keep all cells where predicted_doublet == False
 
 
