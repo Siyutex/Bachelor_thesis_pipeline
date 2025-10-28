@@ -5,6 +5,18 @@ import scanpy as sc
 import re
 import helper_functions as hf
 from scipy import sparse
+import time, threading,psutil # for memory monitoring
+
+# memory monitoring
+process = psutil.Process(os.getpid())
+peak = 0
+def monitor():
+    global peak
+    while True:
+        mem = process.memory_info().rss
+        if mem > peak:
+            peak = mem
+        time.sleep(0.1)
 
 
 # function to sort files numerically
@@ -150,17 +162,16 @@ def aggregate_batches(cancer_type: str, input_prefix,  max_obs_cancerous: int = 
 
     vprint(f"Transferability: {transferability}")
 
-    # concatenate once at the end (on sparse matrices to prevent memory issues)
-    vprint("Converting to sparse matrices...")
-    for ad in adata_list:
-        if not sparse.issparse(ad.X):
-            ad.X = sparse.csr_matrix(ad.X)
-
+    # concatenate once at the end (try catch to catch memory errors)
     print("Concatenating batches...")
-    if adata_list:
-        adata = sc.concat(adata_list, merge="same", join="outer", index_unique="-X", fill_value=0) # join = outer so all genes are kept (not just the intersection of them), merge = same does not work but we remediate this afterwards by reattaching important var columns
-    else:
-        raise ValueError(f"No batches found for cancer type {cancer_type} in {input_data_dir}")
+    try:
+        if adata_list:
+            adata = sc.concat(adata_list, merge="same", join="outer", index_unique="-X", fill_value=0) # join = outer so all genes are kept (not just the intersection of them), merge = same does not work but we remediate this afterwards by reattaching important var columns
+        else:
+            raise ValueError(f"No batches found for cancer type {cancer_type} in {input_data_dir}")
+    except:
+        print(f"Approx peak memory: {peak / 1e9:.2f} GB")
+        raise
 
     # reattach adata.var[key] to aggregated adata for each key that is transferable (the concant function cannot handle it properly)
     print("Mapping var_names -> adata.var[key]...")
@@ -203,5 +214,9 @@ if __name__ == "__main__":
     # import cmd args
     input_data_dir, output_dir, max_obs_cancerous, max_obs_non_cancerous, input_prefix, output_prefix, verbose = hf.import_cmd_args(4)
     vprint = hf.make_vprint(verbose)
+
+    # memory monitoring
+    t = threading.Thread(target=monitor, daemon=True)
+    t.start()
 
     main(input_data_dir, output_dir, max_obs_cancerous, max_obs_non_cancerous, input_prefix, output_prefix, verbose)
