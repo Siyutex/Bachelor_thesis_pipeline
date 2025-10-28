@@ -114,7 +114,7 @@ def main(input_data_file, output_data_dir, refernce_genome_path, corrected_repre
 
     # infer CNVs
     print("Inferring CNV...")
-    cnv.tl.infercnv(internal_adata, reference_key="cancer_state", reference_cat="non_cancerous", calculate_gene_values=True, key_added="cnv") # reference of which cells are normal and should not have CNVs (from annotated input data)
+    cnv.tl.infercnv(internal_adata, reference_key="cancer_state", reference_cat="non_cancerous", calculate_gene_values=True, key_added="cnv", chunksize=100) # reference of which cells are normal and should not have CNVs (from annotated input data)
 
     # get cnv score for each cluster of cells (high score = prbly aneuploidy)
     # first cnv: pca, neighbours, leiden (all of these use scanpy default values in the underlying function)
