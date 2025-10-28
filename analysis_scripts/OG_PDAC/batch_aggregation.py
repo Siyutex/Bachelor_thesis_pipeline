@@ -4,7 +4,7 @@ import os
 import scanpy as sc
 import re
 import helper_functions as hf
-
+from scipy import sparse
 
 
 # function to sort files numerically
@@ -135,7 +135,7 @@ def aggregate_batches(cancer_type: str, input_prefix,  max_obs_cancerous: int = 
                     key_entries.append(adata.var[key][unique_var_name])
             unique_key_entries = set(key_entries)
             if len(unique_key_entries) > 1:
-                vprint(f"var_name {unique_var_name} has more than one unqiue entry in {key} associated with it across batches: {key_entries}")
+                # vprint(f"var_name {unique_var_name} has more than one unqiue entry in {key} associated with it across batches: {key_entries}")
                 unique_tracker.append(False)
             else:
                 unique_tracker.append(True)
@@ -150,7 +150,12 @@ def aggregate_batches(cancer_type: str, input_prefix,  max_obs_cancerous: int = 
 
     vprint(f"Transferability: {transferability}")
 
-    # concatenate once at the end
+    # concatenate once at the end (on sparse matrices to prevent memory issues)
+    vprint("Converting to sparse matrices...")
+    for ad in adata_list:
+        if not sparse.issparse(ad.X):
+            ad.X = sparse.csr_matrix(ad.X)
+
     print("Concatenating batches...")
     if adata_list:
         adata = sc.concat(adata_list, merge="same", join="outer", index_unique="-X", fill_value=0) # join = outer so all genes are kept (not just the intersection of them), merge = same does not work but we remediate this afterwards by reattaching important var columns
