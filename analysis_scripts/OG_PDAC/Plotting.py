@@ -197,26 +197,29 @@ def plot_projection_and_DEGs(adata, layer):
         raise ValueError(f"projection {projection} is not supported")
 
     # for each grouping also run deg analysis
-    if internal_adata.shape[1] == adata.shape[1]: # proxy for varnames being copied over (can't run DEG if you don't know which genes are present)
-        
-        vprint("Preparping data for DEG analysis...")
-        # turn obs annotations into categorical, if they have a reasonable number of categories
-        remove_colored_by = []
-        for entry in colored_by:
-            if len(internal_adata.obs[entry].unique()) <= 20:
-                vprint(f"turning {entry} into categorical, unique values: {len(internal_adata.obs[entry].unique())}")
-                internal_adata.obs[entry] = pd.Categorical(internal_adata.obs[entry])
-            else:
-                vprint(f"{entry} has too many categories ({len(internal_adata.obs[entry].unique())}), cannot compute DEGs for it")
-                remove_colored_by.append(entry)
+    if "projctions+DEGs" in modules:
+        if internal_adata.shape[1] == adata.shape[1]: # proxy for varnames being copied over (can't run DEG if you don't know which genes are present)
+            
+            vprint("Preparping data for DEG analysis...")
+            # turn obs annotations into categorical, if they have a reasonable number of categories
+            remove_colored_by = []
+            for entry in colored_by:
+                if len(internal_adata.obs[entry].unique()) <= 20:
+                    vprint(f"turning {entry} into categorical, unique values: {len(internal_adata.obs[entry].unique())}")
+                    internal_adata.obs[entry] = pd.Categorical(internal_adata.obs[entry])
+                else:
+                    vprint(f"{entry} has too many categories ({len(internal_adata.obs[entry].unique())}), cannot compute DEGs for it")
+                    remove_colored_by.append(entry)
 
-        colored_by = [x for x in colored_by if x not in remove_colored_by] # adjust list
+            colored_by = [x for x in colored_by if x not in remove_colored_by] # adjust list
 
-        for entry in colored_by:
-            vprint(f"computing DEGs for {entry}")
-            get_DEGs(internal_adata, entry)
+            for entry in colored_by:
+                vprint(f"computing DEGs for {entry}")
+                get_DEGs(internal_adata, entry)
+        else:
+            vprint(f"skipping DEG analysis since {layer} has different number of genes than adata")
     else:
-        vprint(f"skipping DEG analysis since {layer} has different number of genes than adata")
+        vprint("skipping DEG analysis")
 
 
 def pseudotime_vs_CNV(adata, show):
@@ -256,7 +259,7 @@ def main():
         sys.exit(0)
 
     # UMAP / PCA plots + DEGs for each layer
-    if "projections" in modules:
+    if "projections" in modules or "projections+DEGs" in modules:
         for layer in layers: # layerlist like [adata.X, adata.obsm["X_cnv"], ...]
             if layer in adata.layers.keys() or layer in adata.obsm.keys() or layer == "X":
                 print(f"plotting projections for {layer}...")

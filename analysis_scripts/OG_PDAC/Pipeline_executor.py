@@ -592,7 +592,7 @@ def infer_pseudotime(
 def cluster_and_plot(
         # necessary arguments
         input_data_file: str, 
-        modules: list[Literal["projections", "pseudotime_vs_cnv"]],
+        modules: list[Literal["projections+DEGs","projections", "pseudotime_vs_cnv"]],
 
         # general arguments
         cell_type: str = None, 
@@ -613,9 +613,10 @@ def cluster_and_plot(
     Runs plotting modules passed in modules list.
 
     Current modules include:
-        - projections, which will produce UMAP or PCA plots computed from the passed layer
+        - projections+DEGs, which will produce UMAP or PCA plots computed from the passed layer
           and colored by the passed obs annotations + leiden clusters. Also computes DEGs for categorical obs annotations + leiden clusters.
           This module uses the following arguments: obs_annotations, layers, projection, marker_file_path, root_cell_idx
+        - projections, identical to projections+DEGs, but does not compute DEGs
         - pseudotime_vs_cnv, which will produce a plot scatterplot of cells, with cnvs on the y axis and pseudotime on the x axis.
           This module uses the following arguments: None
 
