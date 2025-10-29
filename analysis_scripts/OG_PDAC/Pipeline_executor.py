@@ -774,7 +774,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_PDAC.h5ad"), save_output=True, verbose=True, max_considered_genes="all")
         # infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), save_output=True, input_prefix="batch_corrected", verbose=True, cell_type="ductal_cell", corrected_representation="X_scANVI_corrected")
         # infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC.h5ad"), verbose=True, corrected_representation=None, save_output=True)
-        cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), ["projections"], layers=["X", "X_scVI_corrected", "X_scANVI_corrected"], marker_file_path=os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), root_cell_idx=0, obs_annotations=["cancer_state", "batch", "cell_type"], projection="UMAP", show=True, save_output=True, verbose=True)
+        cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), ["projections"], layers=["X", "X_scVI_corrected", "X_scANVI_corrected"], marker_file_path=os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), root_cell_idx=0, obs_annotations=["cancer_state", "batch", "cell_type"], projection="UMAP", show=False, save_output=True, verbose=True)
 
         purge_tempfiles()
         sys.exit(0)
