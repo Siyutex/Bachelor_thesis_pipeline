@@ -151,9 +151,9 @@ def plot_projection_and_DEGs(adata, layer):
     
     # quality checks before plotting
     vprint("quality checks before plotting...")
-    if "cell_type" in colored_by and cell_type is not None:
+    """if "cell_type" in colored_by and cell_type is not None:
         colored_by.remove("cell_type")
-        vprint(f"{cell_type} cells are isolated, removing \"cell_type\" from colored_by list")
+        vprint(f"{cell_type} cells are isolated, removing \"cell_type\" from colored_by list")"""
     for entry in colored_by:
         if entry not in internal_adata.obs.keys():
             colored_by.remove(entry)
