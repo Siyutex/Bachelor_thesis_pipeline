@@ -34,8 +34,14 @@ def check_lognormalize(adata):
 
 def correct_batches_scVI(adata, max_considered_genes) -> Tuple[anndata.AnnData, scvi.model.SCVI]:
     """
-    Correct batches using scVI. Adds a batch-corrected latent representation to `adata.obsm['X_scVI']`.
-    Feed adata with log normalized counts in layer. Optional HVG selection if max_considered_genes is not "all".
+    Correct batches using scVI. Adds a batch-corrected full-gene-space representation to `adata.obsm['X_scVI_corrected']`.
+    Feed adata with raw (filtered) counts in adata.X. Optional HVG selection if max_considered_genes is not "all".
+
+    Preprocessing of adata should be done as follows:
+    - filter cells, genes, UMI counts, mitochondrial percentages, ... (all optional)
+    - DO NOT log normalize, scvi needs raw counts
+    this is according to: https://docs.scvi-tools.org/en/stable/tutorials/notebooks/use_cases/preprocessing.html#scrna-seq
+    where they doe log normalize the data, but then proceed to use a raw layer for HVG selection (and presumably use the result downstream).
 
     Parameters
     ----------
@@ -84,9 +90,6 @@ def correct_batches_scVI(adata, max_considered_genes) -> Tuple[anndata.AnnData, 
 
         internal_adata = adata_hvg.copy()
 
-    check_lognormalize(internal_adata)
-    internal_adata = hf.matrix_to_anndata(internal_adata, "X_log_normalized")
-
 
     try:
         model = scvi.model.SCVI.load("my_scvi_model/", internal_adata)
@@ -108,7 +111,9 @@ def correct_batches_scVI(adata, max_considered_genes) -> Tuple[anndata.AnnData, 
         model.save("my_scvi_model/", overwrite=True)
 
     # Get the batch-corrected latent representation (obsm is a matrix like X where each row is a cell and each column is a feature)
-    internal_adata.obsm["X_scVI_corrected"] = model.get_normalized_expression()
+    # get batch keys
+    batch_keys = internal_adata.obs["batch"].unique()
+    internal_adata.obsm["X_scVI_corrected"] = model.get_normalized_expression(transform_batch=batch_keys[0])
     print(f"Shape of corrected expression matrix{internal_adata.obsm["X_scVI_corrected"].shape}")
 
     return internal_adata, model
@@ -156,7 +161,9 @@ def correct_batches_scANVI(adata_scvi, pretrained_scVI_model) -> Tuple[anndata.A
         model.save("my_scanvi_model/", overwrite=True)
 
     # Get the batch-corrected latent representation (obsm is a matrix like X where each row is a cell and each column is a feature)
-    internal_adata.obsm["X_scANVI_corrected"] = model.get_normalized_expression()
+    # get batch keys
+    batch_keys = internal_adata.obs["batch"].unique()
+    internal_adata.obsm["X_scANVI_corrected"] = model.get_normalized_expression(transform_batch=batch_keys[0])
 
     return internal_adata, model
 
@@ -164,7 +171,7 @@ def correct_batches_scANVI(adata_scvi, pretrained_scVI_model) -> Tuple[anndata.A
 def main(input_data_file, output_dir, max_considered_genes):
     adata = sc.read_h5ad(input_data_file)
 
-    # log normalization done in correct_batches_scVI after optiona HVG selection
+    # run the models, feed in raw (filtered) counts
     adata_scvi, scvi_model = correct_batches_scVI(adata, max_considered_genes=max_considered_genes) # does hvg selection if necessary, copies layer to X
     corrected_adata, scanvi_model = correct_batches_scANVI(adata_scvi, scvi_model) # since first function alrdy checked lognorm and did hvg if wanted, no need to do it again
 

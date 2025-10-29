@@ -1,35 +1,11 @@
-import json
 import scanpy as sc
 
-adata = sc.read_h5ad()
+adata = sc.read_h5ad(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\CNV\CNV_inferred_PDAC.h5ad")
 
+X = adata.obsm("X_scANVI_corrected_gene_values_cnv").copy()
 
+# check how many nans are in matrix
+print(X.isna().sum().sum())
 
-
-
-
-
-"""
-Example SLURM script
-
-#!/bin/bash
-#SBATCH --job-name=myjob
-#SBATCH --output=myjob.out
-#SBATCH --time=01:00:00
-#SBATCH --ntasks=1
-#SBATCH --mem=4G
-
-# Copy input files to local scratch
-cp /home/username/myproject/data/input.csv $TMPDIR
-
-# Run your Python script
-python myscript.py --input $TMPDIR/input.csv --output $TMPDIR/result.csv
-
-# Copy results back
-cp $TMPDIR/result.csv /home/username/myproject/results/
-"""
-
-
-
-
-
+# check how many nans are in each row
+print(X.isna().sum(axis=1))
