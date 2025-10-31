@@ -72,7 +72,7 @@ def assign_chromosomal_coordinats(adata, reference_genome_path):
     adata.var["start"] = coords_matched["start"].values
     adata.var["end"] = coords_matched["end"].values
 
-def add_additional_annotations(adata):
+def add_additional_annotations(adata, cancerous_threshold):
 
     # add CNVs per cell to obs
     vprint("Adding CNVs per cell to adata.obs...")
@@ -85,7 +85,12 @@ def add_additional_annotations(adata):
 
     adata.obs["summed_cnvs"] = summed
 
-def main(input_data_file, output_data_dir, refernce_genome_path, corrected_representation, cell_type):
+    # set adata.obs["cancer_state_inferred"] to cancerous or non_cancerous, based on cnv score percentile
+    # define percentile based on expected amount of cancerous cells from cancer_state (batch origin)
+    percentile = (len(adata[adata.obs["cancer_state"] == "non_cancerous"]) / adata.shape[0]) * 100 #percentile is a float between 0 and 100
+    adata.obs["cancer_state_inferred"] = np.where(adata.obs["cnv_score"] > np.percentile(adata.obs["cnv_score"], percentile), "cancerous", "non_cancerous")
+
+def main(input_data_file, output_data_dir, refernce_genome_path, corrected_representation, cell_type, cancerous_threshold):
 
     # import adata
     print("Reading data...")
@@ -126,7 +131,7 @@ def main(input_data_file, output_data_dir, refernce_genome_path, corrected_repre
 
     # add additional annotations
     print("Adding additional annotations...")
-    add_additional_annotations(internal_adata)
+    add_additional_annotations(internal_adata, cancerous_threshold)
 
     # assign new annotations to original adata
     if corrected_representation is not None:
@@ -152,10 +157,10 @@ def main(input_data_file, output_data_dir, refernce_genome_path, corrected_repre
 
 if __name__ == "__main__":
     # import cmd args
-    input_data_file, output_data_dir, refernce_genome_path, corrected_representation, cell_type, verbose = hf.import_cmd_args(6)
+    input_data_file, output_data_dir, refernce_genome_path, corrected_representation, cell_type, cancerous_threshold, verbose = hf.import_cmd_args(6)
     vprint = hf.make_vprint(verbose)
 
-    main(input_data_file, output_data_dir, refernce_genome_path, corrected_representation, cell_type)
+    main(input_data_file, output_data_dir, refernce_genome_path, corrected_representation, cell_type, cancerous_threshold)
 
 
 

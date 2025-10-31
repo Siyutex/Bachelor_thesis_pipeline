@@ -10,6 +10,7 @@ import infer_CNV as cnv
 import numpy as np
 import pandas as pd
 
+
 """def plot_with_external_legend(adata, projection: str, show=True, root_cell_idx: int = None, **kwargs):
 
     # Prevent Scanpy from immediately showing the plot  
