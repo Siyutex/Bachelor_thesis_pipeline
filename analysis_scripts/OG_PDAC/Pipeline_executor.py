@@ -133,6 +133,158 @@ def request_stop(signum, frame):
     sys.exit(0)
 
 
+def reduce_data(
+        input_data_file: str, 
+        input_prefix: str,
+        layers_to_remove: list[str],
+        save_output: bool = False,
+        output_prefix: str = "reduced",
+        verbose: bool = False) -> list[str]:
+    """ 
+    Reduce the size of an h5ad file by removing unwanted layers / obsm matrices or adata.X.
+
+    Input should be an h5ad file.
+
+    Requires the following annotations to be present:
+        - layers / obsm that are passed to layers_to_remove
+
+    Outputs a gzip compressed h5ad file with reduced layers / obsm matrices
+    Output files are named {output_prefix}_{basename}.h5ad.
+
+    Adds no annotations to adata.
+
+    Parameters:
+        input_data_file (str): path to h5ad file.
+        input_prefix (str): prefix of input file names, must match or will cause error.
+        layers_to_remove (list[str]): list of layers / obsms to remove. Pass "X" to remove adata.X.
+        save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/reduced. Defaults to False.
+        output_prefix (str, optional): prefix for output file names. Defaults to "reduced".
+        verbose (bool, optional): whether to print verbose output from subprocess. Defaults to False.
+
+    Returns:
+        list[str]: list of paths to output files
+    """
+
+    #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "reduced"), exist_ok=True)
+    os.makedirs(os.path.join(TEMP_DIR, "reduced"), exist_ok=True)
+
+    # assign directories for temporary and permanent storage
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "reduced")
+    output_temp_dir = os.path.join(TEMP_DIR, "reduced")
+
+    # assign output file list
+    output_file_list = []
+
+    # run script and assign path to temporary output file
+    print(f"Reducing {input_data_file}")
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Data_reduction.py"), input_data_file, output_temp_dir, [layers_to_remove, verbose])
+
+    # rename output file
+    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}"))
+    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}")
+
+    # add output file to output_file_list
+    output_file_list.append(temp_output_path)
+
+    # if specified, permanently store a copy of the temporary output file
+    if save_output == True:
+        print(f"Saving {temp_output_path} to {output_storage_dir}")
+        shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
+
+    return output_file_list
+
+
+def cluster_and_plot(
+        # necessary arguments
+        input_data_file: str, 
+        modules: list[Literal["projections+DEGs","projections", "pseudotime_vs_cnv"]],
+
+        # general arguments
+        cell_type: str = None, 
+
+        # UMAP / PCA plotting arguments
+        obs_annotations: list[str] = None, 
+        layers: list[str] = ["X"],
+        projection: Literal["UMAP", "PCA"]  = "UMAP",
+        marker_file_path: str = None,
+        root_cell_idx: int = None,
+
+        # auxiliary arguments
+        show: bool = True,
+        save_output: bool = False,
+        verbose: bool = False) -> None:
+    
+    """
+    Runs plotting modules passed in modules list.
+
+    Current modules include:
+        - projections+DEGs, which will produce UMAP or PCA plots computed from the passed layer
+          and colored by the passed obs annotations + leiden clusters. Also computes DEGs for categorical obs annotations + leiden clusters.
+          This module uses the following arguments: obs_annotations, layers, projection, marker_file_path, root_cell_idx
+        - projections, identical to projections+DEGs, but does not compute DEGs
+        - pseudotime_vs_cnv, which will produce a plot scatterplot of cells, with cnvs on the y axis and pseudotime on the x axis.
+          This module uses the following arguments: None
+
+    Input should be an h5ad file with obs annotations for each cell that should be used for clustering.
+
+    Annotations that need to be present:
+        - if cell_type is passed, adata.obs["cell_type"] (from cell_type_annotation.py)
+        - a column in adata.obs for each passed obs annotation
+        - the specified layers need to exist in adata.layers or adata.obsm
+        - if modules includes "pseudotime_vs_cnv", adata.obs["dpt_pseudotime"] (from pseudotime_inference.py), adata.obs["cnv_score"], adata.obs["summed_cnvs] (from infer_CNV.py)
+
+    Outputs png files of plots and text files with DEGs if save_output is True. Shows plots if show is True.
+
+    Does not add annotations, as it does not return an h5ad file.
+
+    Parameters:
+        input_data_dir (str): path to h5ad file with obs annotations for each cell.
+        modules (list[Literal["projections", "pseudotime_vs_cnv"]]): list of modules in plotting scirpt to run.
+        
+        cell_type (str, optional): Name of the cell type in adata.obs["cell_type"] that should be isolated before plotting.
+
+        obs_annotations (list[str], optional): list of obs annotations to cluster. eg ["cell_type", "pseudotime", "cnv_score", ...].
+        layers (str, optional): Anndata layer or obsm keys to use as base for UMAP / PCA projection. Eg. ["X_cnv", "X_scvi_corrected", ...]. Defaults to ["X"], meaning adata.X will be used. 
+        projection (literal ["UMAP", "PCA"], optional): projection to use for clustering. Defaults to "UMAP".
+        marker_file_path (str, optional): path to file with marker genes for each cell type. DEG analysis will not yield matrix plots if not provided.
+        root_cell_idx (int, optional): Index of the root cell of pseudotime. Will be highlighted in pseudotime colored plot.
+        
+        show (bool, optional): whether to show the plots. Defaults to True.
+        save_output (bool, optional): whether to save the plots permanently. Defaults to False.
+        verbose (bool, optional): whether to print verbose output. Defaults to False.
+
+    Returns:
+        None, but saves files with plots if save_output is True
+    """
+    # sanity check
+    if show == False and save_output == False:
+        raise ValueError("At least one of show or save_output must be True")
+
+    #check if OUTCOME_STORAGE_DIR and TEMP_DIR have relevant folder, if not create it
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "plots"), exist_ok=True)
+    os.makedirs(os.path.join(TEMP_DIR, "plots"), exist_ok=True)
+
+    # assign directories for temporary and permanent storage
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "plots")
+    output_temp_dir = os.path.join(TEMP_DIR, "plots")
+
+    # run script and assign path to temporary output file
+    print(f"Clustering and plotting: {input_data_file}")
+    hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Plotting.py"), input_data_file, output_temp_dir, [modules, cell_type, obs_annotations, layers, projection, marker_file_path, root_cell_idx, show, verbose])
+
+    # naming happens in subprocess (relies on knowing which obs column was used)
+
+    # if specified, permanently store a copy of the temporary output file
+    if save_output == True:
+        for file in os.listdir(output_temp_dir):
+            shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, file))
+
+    # outputs will not be used programatically so no need to return list with output file paths
+    # this is why we also don't use input and output prefixes
+    return None
+
+
 @dataclass
 class FilteringParameters:
     """
@@ -532,35 +684,34 @@ def infer_CNVs(
 
     return output_file_list
 
-def reduce_data(
+def isolate_and_HVGs(
         input_data_file: str, 
         main_layer: str = None,
-        layers_to_remove: list[str] = None,
         max_considered_genes: int | Literal["all"] = 3000,
         batch_threshold: float = 0.3,
         save_output: bool = False,
         input_prefix: str = "CNV_inferred",
-        output_prefix: str = "reduced",
+        output_prefix: str = "isolated",
         verbose: bool = False) -> list[str]:
     """ 
-    Reduce the size of an h5ad file by removing layers / obsms that are not necessary and selecting HVGs.
+    Only keep the main layer in adata.X and optionally select HVGs for it. Purge everything else.
+    (all other adata.layers and adata.obsm entries are removed, only main_layer, adata.obs, and adata.var are kept)
     (NOTE: HVG selection only affects the main layer, obsm matrices that are kept are unaffected)
 
     Input should be an h5ad file.
 
-    Requires the following annotations to be present:
-        - layers / obsm that are passed to layers_to_remove
+    Requires the following annotations to be present: 
+        - the main_layer (if main_layer is not None) in adata.X, adata.layers or adata.obsm
 
     Outputs a gzip compressed h5ad file with, optionally, reduced layers / obsms and HVGs.
     Output files are named {output_prefix}_{basename}{suffix}.h5ad.
-    where suffix may contain "_HVG" if HVGs are selected and "_Xis{main_layer}" if main_layer is passed
+    where suffix may contain "_HVG" if HVGs are selected and "_Xis{main_layer}"
 
     Adds no annotations to adata.
 
     Parameters:
         input_data_file (str): path to h5ad file.
         main_layer (str, optional): layer / obsm that will be moved to adata.X. Defaults to None, meaning adata.X will remain as is.
-        layers_to_remove (list[str], optional): list of layers / obsms to remove. Defaults to None, meaning no layers / obsms will be removed.
         max_considered_genes (int, optional): maximum number of HVGs to consider. Defaults to 3000.
             if this is set to "all", no HVGs will be selected.
         batch_threshold (float, optional): relative amount of batches a gene must be an HVG in to be kept. Defaults to 0.3.
@@ -574,23 +725,23 @@ def reduce_data(
     """
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
-    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "reduced"), exist_ok=True)
-    os.makedirs(os.path.join(TEMP_DIR, "reduced"), exist_ok=True)
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "isolated"), exist_ok=True)
+    os.makedirs(os.path.join(TEMP_DIR, "isolated"), exist_ok=True)
 
     # assign directories for temporary and permanent storage
-    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "reduced")
-    output_temp_dir = os.path.join(TEMP_DIR, "reduced")
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "isolated")
+    output_temp_dir = os.path.join(TEMP_DIR, "isolated")
 
     # assign output file list
     output_file_list = []
 
     # run script and assign path to temporary output file
     print(f"Reducing {input_data_file}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Data_reduction.py"), input_data_file, output_temp_dir, [main_layer,layers_to_remove, max_considered_genes, batch_threshold, verbose])
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "matrix_isolation_HVGs.py"), input_data_file, output_temp_dir, [main_layer, max_considered_genes, batch_threshold, verbose])
 
     # rename output file
-    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}{"_HVG" if max_considered_genes != "all" else ""}{"_X_is_" + main_layer if main_layer else ""}.h5ad"))
-    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}{"_HVG" if max_considered_genes != "all" else ""}{"_X_is_" + main_layer if main_layer else ""}.h5ad")
+    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}{"_HVG" if max_considered_genes != "all" else ""}{"_X_is_" + main_layer}.h5ad"))
+    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}{"_HVG" if max_considered_genes != "all" else ""}{"_X_is_" + main_layer}.h5ad")
 
     # add output file to output_file_list
     output_file_list.append(temp_output_path)
@@ -662,95 +813,6 @@ def infer_pseudotime(
         shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
 
     return output_file_list
-
-def cluster_and_plot(
-        # necessary arguments
-        input_data_file: str, 
-        modules: list[Literal["projections+DEGs","projections", "pseudotime_vs_cnv"]],
-
-        # general arguments
-        cell_type: str = None, 
-
-        # UMAP / PCA plotting arguments
-        obs_annotations: list[str] = None, 
-        layers: list[str] = ["X"],
-        projection: Literal["UMAP", "PCA"]  = "UMAP",
-        marker_file_path: str = None,
-        root_cell_idx: int = None,
-
-        # auxiliary arguments
-        show: bool = True,
-        save_output: bool = False,
-        verbose: bool = False) -> None:
-    
-    """
-    Runs plotting modules passed in modules list.
-
-    Current modules include:
-        - projections+DEGs, which will produce UMAP or PCA plots computed from the passed layer
-          and colored by the passed obs annotations + leiden clusters. Also computes DEGs for categorical obs annotations + leiden clusters.
-          This module uses the following arguments: obs_annotations, layers, projection, marker_file_path, root_cell_idx
-        - projections, identical to projections+DEGs, but does not compute DEGs
-        - pseudotime_vs_cnv, which will produce a plot scatterplot of cells, with cnvs on the y axis and pseudotime on the x axis.
-          This module uses the following arguments: None
-
-    Input should be an h5ad file with obs annotations for each cell that should be used for clustering.
-
-    Annotations that need to be present:
-        - if cell_type is passed, adata.obs["cell_type"] (from cell_type_annotation.py)
-        - a column in adata.obs for each passed obs annotation
-        - the specified layers need to exist in adata.layers or adata.obsm
-        - if modules includes "pseudotime_vs_cnv", adata.obs["dpt_pseudotime"] (from pseudotime_inference.py), adata.obs["cnv_score"], adata.obs["summed_cnvs] (from infer_CNV.py)
-
-    Outputs png files of plots and text files with DEGs if save_output is True. Shows plots if show is True.
-
-    Does not add annotations, as it does not return an h5ad file.
-
-    Parameters:
-        input_data_dir (str): path to h5ad file with obs annotations for each cell.
-        modules (list[Literal["projections", "pseudotime_vs_cnv"]]): list of modules in plotting scirpt to run.
-        
-        cell_type (str, optional): Name of the cell type in adata.obs["cell_type"] that should be isolated before plotting.
-
-        obs_annotations (list[str], optional): list of obs annotations to cluster. eg ["cell_type", "pseudotime", "cnv_score", ...].
-        layers (str, optional): Anndata layer or obsm keys to use as base for UMAP / PCA projection. Eg. ["X_cnv", "X_scvi_corrected", ...]. Defaults to ["X"], meaning adata.X will be used. 
-        projection (literal ["UMAP", "PCA"], optional): projection to use for clustering. Defaults to "UMAP".
-        marker_file_path (str, optional): path to file with marker genes for each cell type. DEG analysis will not yield matrix plots if not provided.
-        root_cell_idx (int, optional): Index of the root cell of pseudotime. Will be highlighted in pseudotime colored plot.
-        
-        show (bool, optional): whether to show the plots. Defaults to True.
-        save_output (bool, optional): whether to save the plots permanently. Defaults to False.
-        verbose (bool, optional): whether to print verbose output. Defaults to False.
-
-    Returns:
-        None, but saves files with plots if save_output is True
-    """
-    # sanity check
-    if show == False and save_output == False:
-        raise ValueError("At least one of show or save_output must be True")
-
-    #check if OUTCOME_STORAGE_DIR and TEMP_DIR have relevant folder, if not create it
-    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "plots"), exist_ok=True)
-    os.makedirs(os.path.join(TEMP_DIR, "plots"), exist_ok=True)
-
-    # assign directories for temporary and permanent storage
-    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "plots")
-    output_temp_dir = os.path.join(TEMP_DIR, "plots")
-
-    # run script and assign path to temporary output file
-    print(f"Clustering and plotting: {input_data_file}")
-    hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Plotting.py"), input_data_file, output_temp_dir, [modules, cell_type, obs_annotations, layers, projection, marker_file_path, root_cell_idx, show, verbose])
-
-    # naming happens in subprocess (relies on knowing which obs column was used)
-
-    # if specified, permanently store a copy of the temporary output file
-    if save_output == True:
-        for file in os.listdir(output_temp_dir):
-            shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, file))
-
-    # outputs will not be used programatically so no need to return list with output file paths
-    # this is why we also don't use input and output prefixes
-    return None
 
 
 def infer_GRN_edges(input_data_file: str, n_nodes = None, verbose: bool = False):
@@ -850,8 +912,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), save_output=True, input_prefix="batch_corrected", verbose=True, cell_type="ductal_cell", corrected_representation="X_scANVI_corrected")
         # infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC.h5ad"), verbose=True, corrected_representation=None, save_output=True)
         # output = reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", save_output=True, input_prefix="CNV_inferred", verbose=True, layers_to_remove=["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv"], max_considered_genes="all")
-        cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell_X_is_X_scANVI_corrected.h5ad"), ["projections"], layers=["X"], marker_file_path=os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), obs_annotations=["cancer_state", "cancer_state_inferred", "cnv_score"], projection="UMAP", show=True, save_output=True, verbose=True)
-        cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), ["projections"], layers=["X_scANVI_corrected"], marker_file_path=os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), obs_annotations=["cancer_state", "cancer_state_inferred", "cnv_score"], projection="UMAP", show=True, save_output=True, verbose=True)
+        # reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), "CNV_inferred", ["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, output_prefix="reduced", verbose=True)
+        cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), ["projections"], layers=["X_scANVI_corrected", "X_scANVI_corrected_cnv"], marker_file_path=os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), obs_annotations=["cancer_state", "cancer_state_inferred", "cnv_score"], projection="UMAP", show=False, save_output=True, verbose=True)
 
 
         purge_tempfiles()

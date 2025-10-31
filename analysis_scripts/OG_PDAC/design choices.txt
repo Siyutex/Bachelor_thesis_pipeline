@@ -1,3 +1,11 @@
+General:
+- every obsm matrix that matches the amount of genes of X will be mapped to an adata.layers layers	
+  (this way we can just use the layer parameter on PCA, normalization, log1p, highly_variable_genes
+   and save ourselves a lot of trouble downstream (no maving of obsm -> X))
+   - this does mean that the obsms need to 
+
+
+
 Preprocessing:
 - filtering
 	- min genes per cell, min umis per cell : use 10th percentile cutoffs (np.percentile), WHY: the are quite consistent with what I would choose by eye 	  from a violin plot

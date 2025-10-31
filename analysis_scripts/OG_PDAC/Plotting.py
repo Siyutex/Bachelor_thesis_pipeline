@@ -251,13 +251,13 @@ def main():
         vprint(adata) # show summary about adata structure
     
     # limit anndata to cell type, if not present, exit
-    if cell_type is not None:
+    if cell_type is not None and cell_type in adata.obs["cell_type"].values:
         print(f"isolating {cell_type} cells...")
         adata = adata[adata.obs["cell_type"] == cell_type].copy()
-    if adata.X.shape[0] == 0:
-        print(f"No {cell_type} found in data, skipping to next batch...")
-        print("Output: " + "none")
+    elif cell_type is not None and cell_type not in adata.obs["cell_type"].values:
+        print(f"cell type {cell_type} not found in adata.obs['cell_type'], skipping to next batch...")
         sys.exit(0)
+
 
     # UMAP / PCA plots + DEGs for each layer
     if "projections" in modules or "projections+DEGs" in modules:
