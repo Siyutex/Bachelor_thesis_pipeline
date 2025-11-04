@@ -684,6 +684,71 @@ def infer_CNVs(
 
     return output_file_list
 
+def get_phylogenetic_tree(
+        input_data_file: str, 
+        cnv_score_matrix: str,
+        color_by: list[str],
+        show: bool = True,
+        save_output: bool = False,
+        input_prefix: str = "reduced",
+        output_prefix: str = "transition_clades",
+        verbose: bool = False) -> None:
+    
+    """
+    Create a neighbor joining tree of correlation distances between CNV profiles of cells.
+
+    Input should be an h5ad file containing the cnv_score matrix and the obs annotation that will be used to color the leaves of the tree.
+
+    Annotations that need to be present:
+        - adata.obs[color_by]
+        - adata.obsm[cnv_score_matrix]
+
+    Outputs newick tree file and png image of the tree if save_output is True. Shows tree if show is True.
+
+    ANNOTATIONS = WIP
+
+    Parameters:
+        input_data_dir (str): path to h5ad file.
+        cnv_score_matrix (str): name of cnv_score matrix in adata.obsm.
+        color_by (list[str]): name of obs columns to color leaves of tree by.
+            (Several columns = several layers of color)
+        show (bool, optional): whether to show the plots. Defaults to True.
+        save_output (bool, optional): whether to save the plots permanently. Defaults to False.
+        input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "reduced".
+        output_prefix (str, optional): prefix for output file names. Defaults to "transition_clades".
+        verbose (bool, optional): whether to print verbose output. Defaults to False.
+
+    Returns:
+        list[str]: list of paths to output files.
+    """
+    # sanity check
+    if show == False and save_output == False:
+        raise ValueError("At least one of show or save_output must be True")
+
+    #check if OUTCOME_STORAGE_DIR and TEMP_DIR have relevant folder, if not create it
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "tree"), exist_ok=True)
+    os.makedirs(os.path.join(TEMP_DIR, "tree"), exist_ok=True)
+
+    # assign directories for temporary and permanent storage
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "tree")
+    output_temp_dir = os.path.join(TEMP_DIR, "tree")
+
+    # run script and assign path to temporary output file
+    print(f"Generating phylogenetic tree: {input_data_file}")
+    hf.execute_subprocess(os.path.join(SCRIPT_DIR, "phylogenetic_tree.py"), input_data_file, output_temp_dir, [cnv_score_matrix, color_by, show, verbose])
+
+    # naming happens in subprocess (relies on knowing which obs column was used)
+    # naming of h5ad happens here WIP
+
+    # if specified, permanently store a copy of the temporary output file
+    if save_output == True:
+        for file in os.listdir(output_temp_dir):
+            shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, file))
+
+    # outputs will not be used programatically so no need to return list with output file paths
+    # this is why we also don't use input and output prefixes
+    return None
+
 def isolate_and_HVGs(
         input_data_file: str, 
         main_layer: str = None,
@@ -913,8 +978,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC.h5ad"), verbose=True, corrected_representation=None, save_output=True)
         # output = reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", save_output=True, input_prefix="CNV_inferred", verbose=True, layers_to_remove=["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv"], max_considered_genes="all")
         # reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), "CNV_inferred", ["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, output_prefix="reduced", verbose=True)
-        cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), ["projections"], layers=["X_scANVI_corrected", "X_scANVI_corrected_cnv"], marker_file_path=os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), obs_annotations=["cancer_state", "cancer_state_inferred", "cnv_score"], projection="UMAP", show=False, save_output=True, verbose=True)
-
+        # cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), ["projections"], layers=["X_scANVI_corrected", "X_scANVI_corrected_cnv"], marker_file_path=os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), obs_annotations=["cancer_state", "cancer_state_inferred", "cnv_score"], projection="UMAP", show=False, save_output=True, verbose=True)
+        get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), "X_scANVI_corrected_cnv", ["cancer_state", "cancer_state_inferred"], show=True, save_output=True, verbose=True)
 
         purge_tempfiles()
         sys.exit(0)

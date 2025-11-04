@@ -1,13 +1,29 @@
-import scanpy as sc
-import helper_functions as hf
+from Bio.Phylo.BaseTree import Clade, Tree
+import random
 
-adata = sc.read_h5ad(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\CNV\CNV_inferred_PDAC_ductal_cell.h5ad")
+def random_binary_tree(n_leaves, name_prefix="T"):
+    """Generate a random binary tree with n_leaves terminal nodes."""
+    # start with leaf clades
+    leaves = [Clade(name=f"{name_prefix}{i+1}") for i in range(n_leaves)]
+    
+    # keep combining randomly until one root remains
+    while len(leaves) > 1:
+        # randomly choose two clades to merge
+        a, b = random.sample(leaves, 2)
+        leaves.remove(a)
+        leaves.remove(b)
+        # create a new parent clade
+        new_clade = Clade()
+        new_clade.clades.extend([a, b])
+        leaves.append(new_clade)
+    
+    # the last remaining clade is the root
+    return Tree(root=leaves[0])
 
-new_adata = hf.matrix_to_anndata(adata, "X_scANVI_corrected")
+# Example usage
+tree = random_binary_tree(20)
+from Bio import Phylo
+Phylo.draw_ascii(tree)
 
-print(f"Var names of old and new match: {adata.var_names == new_adata.var_names}")
-
-# now show extract of both var_names
-print(adata.var_names[:20])
-print(new_adata.var_names[:20])
-
+# write the tree to a Newick file
+Phylo.write(tree, "50TNtree.nwk", "newick")
