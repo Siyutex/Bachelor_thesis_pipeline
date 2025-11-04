@@ -51,6 +51,9 @@ def visualize_tree(adata):
     leaf_names = [leaf.name for leaf in terminals]
 
     print(f"[INFO] Found {n_leaves} leaves (cells).")
+    print(f"dytpe of terminals: {type(terminals)}")
+    print(f"dtype of elemts of terminals: {type(terminals[0])}")
+    print(f"[INFO] found terminal leaves: {terminals}")
 
 
     # ==========================
@@ -94,19 +97,21 @@ def visualize_tree(adata):
             if node.name not in coords: # so all terminal nodes will be skipped (so we need not check again below)
                 if node.name != "root":
                     parent = parents[node.name] # get the node's parent (clade object)
-                    children = list(parent.clades) # get the node's parent's children (i.e. siblings + self) (clade objects)
+                    siblings_and_self = list(parent.clades) # get the node's parent's children (i.e. siblings + self) (clade objects)
                     pattern = rf"^{re.escape(str(parent.name))}_\d+$" # this is what a proper sibling name looks like f"parent_{i}"
                     # count children of the node's parent with proper names
                     properly_named_children = 0
-                    for child in children:
-                        if re.match(pattern, child.name):
+                    for element in siblings_and_self:
+                        if re.match(pattern, element.name):
                             properly_named_children += 1
                     node.name = f"{str(parents[node.name].name)}_{properly_named_children + 1}" # name the node as the nth child of its parent (n = properly_named_siblings + 1, so if a parent has 5 childern, then it will be parent_1 for the first one that is checked, then parent_2, and so on up to root_1_1_1_2_5_1_7_4_2_2...)
                 
 
                     # for terminal children of the node's parent, add the angle
                     angled_terminal_children = 0
-                    terminal_children = list(set(children).intersection(set(terminals)))
+                    print(f"children of {node.name}: {list(node.clades)}")
+                    terminal_children = list(set(node.clades).intersection(set(terminals)))
+                    print(f"terminal children of {node.name}: {terminal_children}")
                     for terminal_child in terminal_children:
                         _, og_radius = coords[terminal_child.name] # get tuple values
                         parent_angle = coords[parent.name][0] # this is the angle of the parten
@@ -118,8 +123,13 @@ def visualize_tree(adata):
 
                     # find suitable angle for the node
                     parent_angle = coords[parent.name][0]
-                    angle = parent_angle + (360/n_leaves)*properly_named_children + (360/n_leaves)*angled_terminal_children# TODO the constant needs to be expressed as a function of tree structure (if 9000 terminal nodes then we need to space them by 2 * np.pi/9000 (we are using radians here) each to cover the circle, this should also apply to internal nodes to get a nice tree)
-                
+                    angle = parent_angle + (360/n_leaves)*properly_named_children # + (360/n_leaves)*angled_terminal_children# TODO the constant needs to be expressed as a function of tree structure (if 9000 terminal nodes then we need to space them by 2 * np.pi/9000 (we are using radians here) each to cover the circle, this should also apply to internal nodes to get a nice tree)
+
+                    print(f"Properly named children of the parent {parent.name} so far: {properly_named_children}")
+                    print(f"Angle should be parent angle ({parent_angle}) + {properly_named_children} * (360/n_leaves)")
+                    print(f"Angle of {node.name} is {angle}, with radius 0.005 * {depth} (depth)")
+
+                    # add the node
                     coords[node.name] = (angle, 0.005 * depth) # if the node name == "root" then angle = 0 and depth = 0 (TODO the constant needs to be expressed as a function of tree structure)
 
                 print(f"Node {node.name} is the {iterator}th internal node. It's radius is {coords[node.name][1]} and its theta is {coords[node.name][0]}")
@@ -215,13 +225,12 @@ def visualize_tree(adata):
                 marker=dict(size=4, color=colors, line=dict(width=0)),
                 name=col,
                 hovertext=[
-                  "gode"                           #f"{leaf}: {col}={obs.loc[leaf, col]}"
-                                             # for leaf in leaf_names
+                  f"{leaf}"                        #f"{leaf}: {col}={obs.loc[leaf, col]}"
+                  for leaf in leaf_names                           # for leaf in leaf_names
                 ],
                 hoverinfo="text",
             )
         )
-
 
     # DEBUG
     # write coords and xycoords to json
@@ -256,13 +265,14 @@ def visualize_tree(adata):
     # draw smaller point at each internal node
     for clade in tree.find_clades(order="level"):
         x, y = xy_coords.get(clade.name, (0, 0))
-        print(f"drawing point at {x}, {y}")
         node_traces.append(
             go.Scatter(
                 x=[x],
                 y=[y],
                 mode="markers",
                 marker=dict(size=5, color="black", line=dict(width=0)),
+                hovertext=[clade.name],
+                hoverinfo="text",
             )
         )
 
@@ -270,7 +280,7 @@ def visualize_tree(adata):
     # Step 7: Combine and render
     # ==========================
 
-    fig = go.Figure(edge_traces)  # ADD + node_traces after debugging
+    fig = go.Figure(edge_traces + node_traces)  # ADD + node_traces after debugging
 
     fig.update_layout(
         showlegend=True,
