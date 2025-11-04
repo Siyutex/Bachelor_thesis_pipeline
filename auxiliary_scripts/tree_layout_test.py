@@ -21,7 +21,7 @@ def visualize_tree(adata):
     # Configuration
     # ==========================
 
-    tree_file = r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\tree\50TNtree.nwk"      # output of scikit-bio neighbor-joining
+    tree_file = r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\tree\200TNtree.nwk"      # output of scikit-bio neighbor-joining
     metadata_columns = obs_columns  # columns from adata.obs to show as rings
     ring_spacing = 0.025            # distance between concentric rings
     base_radius = 1.0               # radius of leaf circle
@@ -36,6 +36,16 @@ def visualize_tree(adata):
     obs = adata.obs.copy()
 
     print(type(tree))
+
+    # debug
+    # get_max_tree depth
+    def max_depth(node):
+        if not node.clades:  # leaf
+            return 0
+        return 1 + max(max_depth(c) for c in node.clades)
+
+    maximum_depth = max_depth(tree.root)
+    print("Max depth (edges from root):", maximum_depth)
 
 
     # ==========================
@@ -108,7 +118,7 @@ def visualize_tree(adata):
                 
                 # ANGLE THE NODE
                 # angle the current node itself
-                coords[node.name] = (angle, 0.005 * depth)
+                coords[node.name] = (angle, (1/maximum_depth) * depth)
                 
                 # CHECK FOR TERMINAL CHILDREN
                 # check for existence
