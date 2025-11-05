@@ -21,9 +21,9 @@ def random_binary_tree(n_leaves, name_prefix="T"):
     return Tree(root=leaves[0])
 
 # Example usage
-tree = random_binary_tree(200)
+tree = random_binary_tree(1500)
 from Bio import Phylo
 Phylo.draw_ascii(tree)
 
 # write the tree to a Newick file
-Phylo.write(tree, "200TNtree.nwk", "newick")
+Phylo.write(tree, "1500TNtree.nwk", "newick")

@@ -21,7 +21,7 @@ def visualize_tree(adata):
     # Configuration
     # ==========================
 
-    tree_file = r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\tree\200TNtree.nwk"      # output of scikit-bio neighbor-joining
+    tree_file = r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\tree\test trees/1500TNtree.nwk"      # output of scikit-bio neighbor-joining
     metadata_columns = obs_columns  # columns from adata.obs to show as rings
     ring_spacing = 0.025            # distance between concentric rings
     base_radius = 1.0               # radius of leaf circle
@@ -118,7 +118,7 @@ def visualize_tree(adata):
                 
                 # ANGLE THE NODE
                 # angle the current node itself
-                coords[node.name] = (angle, (1/maximum_depth) * depth)
+                coords[node.name] = (angle, (base_radius/maximum_depth) * depth)
                 
                 # CHECK FOR TERMINAL CHILDREN
                 # check for existence
@@ -152,7 +152,35 @@ def visualize_tree(adata):
 
         return coords
 
-    coords = compute_radial_layout(tree, leaf_names, 1)
+    coords = compute_radial_layout(tree, leaf_names, base_radius) # changes names, so parents dict must be recomputed
+
+
+    def lower_branch_node_radii(tree, node):
+
+        # define local consts
+        children = list(node.clades)
+        non_terminal_children = list(set(children).difference(set(terminals)))
+
+        # recurse on all non terminal children
+        child_radii = [] # list to store radii of all non terminal children
+        if non_terminal_children != []:
+            for ntc in non_terminal_children:
+                child_radius = lower_branch_node_radii(tree, ntc)
+                child_radii.append(child_radius)
+        min_child_radius = min(child_radii) if child_radii != [] else base_radius # if there are only terminal children, the will all have the base radius
+
+        if node.name != "root": # avoid moving the root node
+            # move node (all nodes descending from it have already been moved)
+            og_angle, og_radius = coords[node.name]
+            new_radius = min_child_radius - base_radius/maximum_depth # so say the child that is closest to the center is at 1 and 50 nodes then this nodes at 1 - 1/50 = 49/50
+            coords[node.name] = (og_angle, new_radius)
+
+            return new_radius        
+
+        
+    # move internal nodes closer to terminal nodes for visibility
+    lower_branch_node_radii(tree, tree.root)
+
 
     #DEBUGGING: print tree structure to json
     parents = {}
