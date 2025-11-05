@@ -270,11 +270,6 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
             )
 
 
-
-
-
-
-
     # DRAW ANNOTATION RINGS
     # draws one ring per obs column
     # different categories get different colors
@@ -296,8 +291,8 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
                     marker=dict(size=4, color=colors, line=dict(width=0)),
                     name=col,
                     hovertext=[
-                    f"{leaf}, {col}={obs.loc[leaf, col]}"                        #f"{leaf}: {col}={obs.loc[leaf, col]}"
-                    for leaf in leaf_names                           # for leaf in leaf_names
+                    f"{leaf}, {col}={obs.loc[leaf, col]}"
+                    for leaf in leaf_names                           
                     ],
                     hoverinfo="text",
                 )
@@ -343,11 +338,9 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
                 )
             )
 
-    # ==========================
-    # Step 7: Combine and render
-    # ==========================
-
-    fig = go.Figure(edge_traces + node_traces)  # ADD + node_traces after debugging
+   
+    # RENDER THE FIGURE
+    fig = go.Figure(edge_traces + node_traces)  # combine edge and node traces
 
     fig.update_layout(
         showlegend=True,
@@ -360,8 +353,19 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
 
-    if show: fig.show()
-    if save: fig.write_image("cnv_tree_multiring.svg")
+    if show: 
+        fig.show()
+    if save: 
+        print("Oh, you want save to save the figure? That's great! But you will have to do it manually, bcs plotly is a bit weird.")
+        print(f"You may want to save to this path: {(os.path.join(output_dir, f"{os.path.basename(tree_file).removesuffix('.nwk')}.png"))}")
+
+        if show != True:
+            print("I shall now show you the figure, so you may save it.")
+            fig.show()
+        if show == True: # don't need to show again if it is already shown
+            print("You already have the figure shown, so I shan't overtax your RAM by showing it again.")
+            
+        
 
 
     if debug:
@@ -374,12 +378,22 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
             json.dump(parents, f, indent=4)
 
         # DEBUGGING: write visitation order to json (with lates names)
-        visitation_order = get_visitation_order_depth(tree)
+        if sort_order == "lowest_depth_first":
+            visitation_order = get_visitation_order_depth(tree)
+        elif sort_order == "lowest_width_first":
+            visitation_order = get_visitation_order_width(tree) # dict of lists of tuples (tuple = (calde, number))
         # change clade to string (clade is not json serializable)
-        visitation_order = [(str(clade), dist) for clade, dist in visitation_order]
+        visitation_order_str = {}
+        for item in visitation_order.items():
+            key = item[0]
+            tuple_list = item[1]
+            new_tuple_list = []
+            for t in tuple_list:
+                new_tuple_list.append((str(t[0]), t[1])) # need to turn clade into string for json
+            visitation_order_str[key] = new_tuple_list    
         # dump to json for debugging
         with open("visitation_order.json", "w") as f:
-            json.dump(visitation_order, f, indent=4)
+            json.dump(visitation_order_str, f, indent=4)
 
         # DEBUGGING: write coords to json
         with open("coords.json", "w") as f:
@@ -430,7 +444,7 @@ def main():
 
     # Save tree
     print("saving tree to temp file")
-    tree.write(os.path.join(output_dir, f"cnv_tree{os.path.basename(input_data_file)}.nwk"), format="newick")
+    tree.write(os.path.join(output_dir, f"cnv_tree{os.path.basename(input_data_file).removesuffix('.h5ad')}.nwk"), format="newick")
     tree.write(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\tree\test.nwk", format="newick")
 
     # Visualize tree
@@ -443,7 +457,7 @@ if __name__ == "__main__":
     # vprint = hf.make_vprint(verbose)
 
     input_data_file = r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\reduced\reduced_PDAC_ductal_cell.h5ad"
-    output_dir = "None"
+    output_dir = r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\tree"
     cnv_score_matrix = None
     obs_columns = ["cancer_state", "cancer_state_inferred"]
     show = True
@@ -452,7 +466,7 @@ if __name__ == "__main__":
 
     import sys
     adata = sc.read_h5ad(input_data_file)
-    visualize_tree(adata, tree_file=r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\tree\PDAC_ductal_cnv_tree.nwk", obs_columns=obs_columns, debug=False)
+    visualize_tree(adata, tree_file=r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\tree\PDAC_ductal_cnv_tree.nwk", save=True, obs_columns=obs_columns)
     sys.exit(0)
 
     main()
