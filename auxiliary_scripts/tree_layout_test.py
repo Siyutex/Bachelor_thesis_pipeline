@@ -37,20 +37,24 @@ def visualize_tree(adata):
 
     print(type(tree))
 
-    # debug
-    # get_max_tree depth
-    def max_depth(node):
-        if not node.clades:  # leaf
-            return 0
-        return 1 + max(max_depth(c) for c in node.clades)
-
-    maximum_depth = max_depth(tree.root)
-    print("Max depth (edges from root):", maximum_depth)
-
 
     # ==========================
     # Step 2: Get ordered leaves (no overlaps)
     # ==========================
+
+    # name the root
+    tree.root.name = "root"
+
+    # give arbitrary unique names to non leaf nodes
+    i = 0
+    for node in tree.get_nonterminals():
+        if node.name != "root":
+            node.name = f"node_{i}"
+        i += 1
+    # assert there are no duplicate names in nonterminals
+    assert len(set(tree.get_nonterminals())) == len(tree.get_nonterminals())
+
+
 
     def ordered_terminals(tree):
         """Return leaf nodes in topologically consistent postorder."""
@@ -65,18 +69,53 @@ def visualize_tree(adata):
     print(f"dtype of elemts of terminals: {type(terminals[0])}")
     print(f"[INFO] found terminal leaves: {terminals}")
 
+    # debug
+    # get_max_tree depth
+    def max_depth(node):
+        if not node.clades:  # leaf
+            return 0
+        return 1 + max(max_depth(c) for c in node.clades)
+
+    maximum_depth = max_depth(tree.root)
+    print("Max depth (edges from root):", maximum_depth)
+
+    # get dict that contains list of children
+    # ordered in a way where lower index = lower number of its children between itself and closest child that only has terminal children
+    def get_visitation_order(tree):
+        visitation_order = {}
+
+        def recurse(node):
+            children = list(node.clades)
+            non_terminal_children = list(set(children).difference(set(terminals)))
+            if non_terminal_children == []:
+                return 0 # if the node itself only has terminaly children, its distance to such a nod is evidently 0 (bcs it is such a node)
+
+            distance_list = []
+            for ntc in non_terminal_children:
+                distance_to_last_ntc = recurse(ntc) # this is the distance from the ntc to its closest ntc that only has terminal children (0 = the node itself only has terminal children, 1 = a directly connected node only has terminal children, etc.)
+                distance_list.append((ntc, distance_to_last_ntc)) # tuple of child as clade object and its above described distance
+
+            distance_list.sort(key=lambda x: x[1]) # sort in ascending order by distance
+            visitation_order[node.name] = distance_list
+            print(visitation_order[node.name])
+
+            return distance_list[0][1] + 1
+        
+        recurse(tree.root) # fills visitation_order dict
+
+        return visitation_order
+    
+    
+
+
+    
+
 
     # ==========================
     # Step 3: Assign radial coordinates
     # ==========================
 
-    # give arbitrary unique names to non leaf nodes
-    i = 0
-    for node in tree.get_nonterminals():
-        node.name = f"node_{i}"
-        i += 1
-    # assert there are no duplicate names in nonterminals
-    assert len(set(tree.get_nonterminals())) == len(tree.get_nonterminals())
+
 
     def all_parents(tree):
         parents = {}
@@ -86,9 +125,9 @@ def visualize_tree(adata):
         return parents
     parents = all_parents(tree) # key = node name, value = its parent's node name
 
-    # output as json
-    """with open("parents.json", "w") as f:
-        json.dump(parents, f, indent=4)"""
+    visitation_order = get_visitation_order(tree) # use for set internal in compute_radial_layout
+    for key in visitation_order:
+        print(f"key: {key} value: {visitation_order[key]}")
         
 
     def compute_radial_layout(tree, leaf_names, terminal_node_radius):
@@ -100,6 +139,11 @@ def visualize_tree(adata):
         # recursively assign internal node radii inward based on depth
         def set_internal(node, depth, angle): # angle is the total sum of all angles up the current node on the entire tree (depth first)
             if node.name not in leaf_names: # so all terminal nodes will be skipped (so we need not check again below)
+                
+                # before renaming, extract visitation order (remaning breaks the mapping)
+                if any(child not in terminals for child in node.clades): # if the current node only has terminal children, it will not have an entry in visitation_order
+                    local_visitation_order = visitation_order[node.name] # list of tuples, lower index = visit first (child (clade object), number of nodes that need to be travelled from that child to its closest possible descendant that only has terminal children)
+
                 if node.name != "root":
                     
                     # NAME THE NODE
@@ -138,16 +182,18 @@ def visualize_tree(adata):
                 total_angle = angle + added_angle # combination of prior angle + gained angle from terminal children
 
                 # RECURSIVE CALL
-                for child in node.clades:
-                    if child not in terminal_children:
-                        total_angle = set_internal(child, depth + 1, total_angle)
+                if any(child not in terminals for child in node.clades): # need to make sure that the node has non terminal children (visitation order contains no keys for terminal nodes)
+                    for child, distance in local_visitation_order: # already orderer so children with smaller distance to closest descendant with only terminal children are visited first
+                        if child not in terminal_children:
+                            total_angle = set_internal(child, depth + 1, total_angle)
 
                 # RETURN (this can only trigger once all recurscive calls are done)
                 return total_angle
                     
                 
-        tree.root.name = "root"
+
         coords["root"] = (0, 0)
+        print(f"Root name: {tree.root.name}")
         set_internal(tree.root, 0, 0)
 
         return coords
@@ -325,6 +371,13 @@ def visualize_tree(adata):
 
     # optional: save to file
     # fig.write_image("cnv_tree_multiring.svg")
+
+
+    # DEBUG
+    """visitation_order = get_visitation_order(tree)
+    # dump to json for debugging
+    with open("visitation_order.json", "w") as f:
+        json.dump(visitation_order, f, indent=4)"""
     
 
 def main():
