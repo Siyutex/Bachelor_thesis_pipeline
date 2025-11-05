@@ -18,15 +18,9 @@ from typing import Literal
 
 def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.025, base_radius = 1, target_circumference = 2*np.pi * 0.9, sort_order: Literal["lowest_width_first", "lowest_depth_first"] = "lowest_width_first", show = True, save = False, debug = False):
 
-    # LOAD TREE AND METADATA
-    vprint("Loading tree and obs columns...")
-    tree = Phylo.read(tree_file, "newick")
-    obs = adata.obs.copy()
-
-
     # PRELIMINARY NAMING OF NODES
-    # name the root
     def get_preliminary_names(tree):
+        # name the root
         tree.root.name = "root"
         # give arbitrary unique names to non leaf nodes (leaf nods should have unique names already (eg cell ID))
         i = 0
@@ -36,27 +30,20 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
             i += 1
         # assert there are no duplicate names in nonterminals
         assert len(set(tree.get_nonterminals())) == len(tree.get_nonterminals())
-    get_preliminary_names(tree)
 
 
     # GET ORDERED LEAVES
     def ordered_terminals(tree):
         """Return leaf nodes in topologically consistent postorder."""
         return list(tree.get_terminals(order="postorder"))
-    terminals = ordered_terminals(tree)
-    n_leaves = len(terminals)
-    leaf_names = [leaf.name for leaf in terminals]
-    vprint(f"Found {n_leaves} leaves (cells) in tree")
-
+    
 
     # FIND MAX DEPTH (needed for computing node radii in radial layout)
     def max_depth(node):
         if not node.clades:  # leaf
             return 0
         return 1 + max(max_depth(c) for c in node.clades)
-    maximum_depth = max_depth(tree.root)
-    vprint("Max depth of tree (n_edges from root):", maximum_depth)
-
+    
 
     # GET VISITATION ORDER BY CLADE DEPTH
     # This is a dictionary of tuples
@@ -119,11 +106,6 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
         
         return visitation_order
 
-    if sort_order == "lowest_depth_first":
-        visitation_order = get_visitation_order_depth(tree) # use for set internal in compute_radial_layout
-    elif sort_order == "lowest_width_first":
-        visitation_order = get_visitation_order_width(tree)
-
 
     # GET PARENTS DICTIONARY
     # the keys are node names, and the values are the clade object corresponding to its parent
@@ -134,9 +116,8 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
             for child in clade:
                 parents[child.name] = clade
         return parents
-    parents = all_parents(tree) # key = node name, value = its parent's node name
+    
 
-        
     # COMPUTE RADIAL LAYOUT OF TREE
     # assigns polar coordinates to ever node in the tree to create a circular tree structure for plotting
     # recursive function -> avoid heavy computation within (this is why we precompute parents and visitation orders -> retrieve before renaming of node to stay valid)
@@ -204,11 +185,10 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
         coords["root"] = (0, 0) # seet base coords for root
         set_internal(tree.root, 0, 0) # call the function on the root
         return coords
-    coords = compute_radial_layout(tree, leaf_names, base_radius) # changes names, so parents dict must be recomputed
-
+    
 
     # MOVE INTERNAL NODES CLOSER TO TERMINAL NODES FOR VISIBILITY
-    def lower_branch_node_radii(tree, node):
+    def increase_branch_node_radii(tree, node):
 
         # define local consts
         children = list(node.clades)
@@ -218,7 +198,7 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
         child_radii = [] # list to store radii of all non terminal children
         if non_terminal_children != []:
             for ntc in non_terminal_children:
-                child_radius = lower_branch_node_radii(tree, ntc)
+                child_radius = increase_branch_node_radii(tree, ntc)
                 child_radii.append(child_radius)
         min_child_radius = min(child_radii) if child_radii != [] else base_radius # if there are only terminal children, they will all have the base radius
 
@@ -228,14 +208,7 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
             new_radius = min_child_radius - base_radius/maximum_depth # so say the child that is closest to the center is at 1 and 50 nodes then this nodes at 1 - 1/50 = 49/50
             coords[node.name] = (og_angle, new_radius)
 
-            return new_radius        
-    lower_branch_node_radii(tree, tree.root)
-
-
-    # CONVERT POLAR TO XY COORDS
-    xy_coords = {}
-    for name, (theta, r) in coords.items():
-        xy_coords[name] = (r * np.cos(theta), r * np.sin(theta))
+            return new_radius   
 
 
     # DEFINE COLOR MAPS FOR OBS COLUMNS
@@ -244,62 +217,122 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
         palette = sns.color_palette("tab10", len(cats)).as_hex()
         cmap = dict(zip(cats, palette))
         return df[column].map(cmap), cmap
+    
+
+    # DRAW EDGES AS GREY LINES
+    # draws an edge between any 2 connected nodes
+    def add_edges(tree, edge_traces, xy_coords):
+        for clade in tree.find_clades(order="level"):
+            for child in clade.clades:
+                x0, y0 = xy_coords.get(clade.name, (0, 0))
+                x1, y1 = xy_coords.get(child.name, (0, 0))
+                edge_traces.append(
+                    go.Scatter(
+                        x=[x0, x1],
+                        y=[y0, y1],
+                        mode="lines",
+                        line=dict(color="lightgray", width=1),
+                        hoverinfo="none",
+                        showlegend=False,
+                    )
+                )
+    
+
+    # DRAW ANNOTATION RINGS
+    # draws one ring per obs column
+    # different categories get different colors
+    def add_annotation_rings(node_traces, obs_columns, xy_coords, leaf_names):
+        base_coords = np.array([xy_coords[n] for n in leaf_names])
+        if obs_columns != []:
+            vprint(f"Obs columns to draw annotation rings for: {obs_columns}")
+            for i, col in enumerate(obs_columns):
+                colors = obs.loc[leaf_names, f"{col}_color"]
+                xs, ys = base_coords[:, 0], base_coords[:, 1]
+                scale = 1 + ring_spacing * i  # expand outward for each ring
+
+                vprint(f"Drawing annotation ring for {col}")
+                node_traces.append(
+                    go.Scatter(
+                        x=xs * scale,
+                        y=ys * scale,
+                        mode="markers",
+                        marker=dict(size=4, color=colors, line=dict(width=0)),
+                        name=col,
+                        hovertext=[
+                        f"{leaf}, {col}={obs.loc[leaf, col]}"
+                        for leaf in leaf_names                           
+                        ],
+                        hoverinfo="text",
+                    )
+                )
+
+    # LOAD TREE AND METADATA
+    vprint("Loading tree and obs columns...")
+    tree = Phylo.read(tree_file, "newick")
+    obs = adata.obs.copy()
+
+    # ASSIGN PRELIMINARY NAMES (needed for functions that work on the tree)
+    vprint("Assigning preliminary names to tree nodes...")
+    get_preliminary_names(tree)
+
+
+    # GET MORE GENERAL TREE PARAMTERS (needed for function behavior)
+    vprint("Finding leaves...")
+    terminals = ordered_terminals(tree)
+    n_leaves = len(terminals)
+    leaf_names = [leaf.name for leaf in terminals]
+    vprint(f"Found {n_leaves} leaves (cells) in tree")
+    # GENERAL TREE PARAMTER
+    vprint("Finding maximum depth of tree...")
+    maximum_depth = max_depth(tree.root)
+    vprint("Max depth of tree (n_nodes from root):", maximum_depth)
+
+    # VISITATION ORDER (needed for tree traversal and formatting)
+    vprint("Computing visitation order dictionary for tree traversal...")
+    if sort_order == "lowest_depth_first":
+        visitation_order = get_visitation_order_depth(tree) # use for set internal in compute_radial_layout
+    elif sort_order == "lowest_width_first":
+        visitation_order = get_visitation_order_width(tree)
+
+    # PARENT CHILD RELATIONSHIPS (needed for function behavior, do not move this, names are changed in compute_radial_layout)
+    vprint("Creating dictionary of child to parent mappings...")
+    parents = all_parents(tree) # key = node name, value = its parent's node name
+
+    # GET ACTUAL TREE LAYOUT (node locations, uses recursion to traverse the tree according to visitation order)
+    vprint("Computing radial layout of tree nodes...")
+    coords = compute_radial_layout(tree, leaf_names, base_radius) # changes names, so parents dict must be recomputed
+
+    # INCREASE BRANCH NODE RADIUS (usually the are quite centered, which makes branches quite dense and hard to see)
+    vprint("Increasing branch node radii for visibility...")
+    increase_branch_node_radii(tree, tree.root)
+
+    # MAPPING FOR ANNOTATION RINGS
+    vprint("Mapping obs columns to colors...")
     column_color_maps = {}
     if obs_columns != []:
         for col in obs_columns:
             obs[f"{col}_color"], cmap = map_colors(obs, col)
             column_color_maps[col] = cmap
 
-  
-    # DRAW EDGES AS GREY LINES
-    # draws an edge between any 2 connected nodes
+    # CONVERT POLAR TO XY COORDS
+    vprint("Converting polar coordinates to xy coordinates for plotting...")
+    xy_coords = {}
+    for name, (theta, r) in coords.items():
+        xy_coords[name] = (r * np.cos(theta), r * np.sin(theta))
+
+    # DRAW EDGES
+    vprint("Drawing edges between connected nodes...")
     edge_traces = []
-    for clade in tree.find_clades(order="level"):
-        for child in clade.clades:
-            x0, y0 = xy_coords.get(clade.name, (0, 0))
-            x1, y1 = xy_coords.get(child.name, (0, 0))
-            edge_traces.append(
-                go.Scatter(
-                    x=[x0, x1],
-                    y=[y0, y1],
-                    mode="lines",
-                    line=dict(color="lightgray", width=1),
-                    hoverinfo="none",
-                    showlegend=False,
-                )
-            )
+    add_edges(tree, edge_traces, xy_coords)
 
-
-    # DRAW ANNOTATION RINGS
-    # draws one ring per obs column
-    # different categories get different colors
-    base_coords = np.array([xy_coords[n] for n in leaf_names])
+    # DRAW ANNOTATION RINGS (1 ring per obs column)
+    vprint("Drawing annotation rings...")
     node_traces = []
-    if obs_columns != []:
-        vprint(f"Obs columns to draw annotation rings for: {obs_columns}")
-        for i, col in enumerate(obs_columns):
-            colors = obs.loc[leaf_names, f"{col}_color"]
-            xs, ys = base_coords[:, 0], base_coords[:, 1]
-            scale = 1 + ring_spacing * i  # expand outward for each ring
+    add_annotation_rings(node_traces, obs_columns, xy_coords, leaf_names)
 
-            vprint(f"Drawing annotation ring for {col}")
-            node_traces.append(
-                go.Scatter(
-                    x=xs * scale,
-                    y=ys * scale,
-                    mode="markers",
-                    marker=dict(size=4, color=colors, line=dict(width=0)),
-                    name=col,
-                    hovertext=[
-                    f"{leaf}, {col}={obs.loc[leaf, col]}"
-                    for leaf in leaf_names                           
-                    ],
-                    hoverinfo="text",
-                )
-            )
-
-    # DRAW POINT AT ROOT LOCATION
-    print(f"Tree root is at:\n{coords[tree.root.name]}")
+    # DRAW POINT AT ROOT LOCATION (for orientation)
+    vprint("Drawing point at root location...")
+    vprint(f"Tree root is at:\n{coords[tree.root.name]}")
     node_traces.append(
         go.Scatter(
             x= [int(xy_coords[tree.root.name][0])],   
@@ -311,9 +344,11 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
         )
     )
 
- 
+
+    # FIGURE RELATED DEBUGGING POINTS (must be done before rendering as they are drawn on the figure)
     if debug:
         # draw point at (0,0) for debugging
+        print("DEBUG: Drawing point at (0,0)")
         node_traces = []
         node_traces.append(
             go.Scatter(
@@ -325,6 +360,7 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
         )
 
         # draw smaller point at each internal node
+        print("DEBUG: Drawing points at each internal node")
         for clade in tree.find_clades(order="level"):
             x, y = xy_coords.get(clade.name, (0, 0))
             node_traces.append(
@@ -340,8 +376,8 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
 
    
     # RENDER THE FIGURE
+    vprint("Rendering figure...")
     fig = go.Figure(edge_traces + node_traces)  # combine edge and node traces
-
     fig.update_layout(
         showlegend=True,
         title="CNV Tree with Multi-Ring Annotations",
@@ -353,6 +389,7 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
 
+    # SHOW AND SAVE FIGURE
     if show: 
         fig.show()
     if save: 
@@ -364,12 +401,12 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
             fig.show()
         if show == True: # don't need to show again if it is already shown
             print("You already have the figure shown, so I shan't overtax your RAM by showing it again.")
-            
+
         
-
-
+    # FILE RELATED DEBUGGING OPTIONS
     if debug:
         #DEBUGGING: write all parent-child relationships to json (with latest names)
+        print("DEBUG: Writing all parent-child relationships to json...")
         parents = {}
         for clade in tree.find_clades(order="level"):
             for child in clade:
@@ -378,6 +415,7 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
             json.dump(parents, f, indent=4)
 
         # DEBUGGING: write visitation order to json (with lates names)
+        print("DEBUG: Writing visitation order to json...")
         if sort_order == "lowest_depth_first":
             visitation_order = get_visitation_order_depth(tree)
         elif sort_order == "lowest_width_first":
@@ -396,6 +434,7 @@ def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.02
             json.dump(visitation_order_str, f, indent=4)
 
         # DEBUGGING: write coords to json
+        print("DEBUG: Writing radial and xycoords to json...")
         with open("coords.json", "w") as f:
             json.dump(coords, f, indent=3)
         with open("xycoords.json", "w") as f:
