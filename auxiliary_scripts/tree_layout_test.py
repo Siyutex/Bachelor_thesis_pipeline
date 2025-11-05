@@ -14,75 +14,65 @@ import plotly.graph_objects as go
 from Bio import Phylo
 import json
 import re
+from typing import Literal
 
-def visualize_tree(adata):
+def visualize_tree(adata, tree_file, obs_columns: list = [], ring_spacing = 0.025, base_radius = 1, target_circumference = 2*np.pi * 0.9, sort_order: Literal["lowest_width_first", "lowest_depth_first"] = "lowest_width_first", show = True, save = False, debug = False):
 
-    # ==========================
-    # Configuration
-    # ==========================
-
-    tree_file = r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\tree\test trees/1500TNtree.nwk"      # output of scikit-bio neighbor-joining
-    metadata_columns = obs_columns  # columns from adata.obs to show as rings
-    ring_spacing = 0.025            # distance between concentric rings
-    base_radius = 1.0               # radius of leaf circle
-    target_circumference = (2 * np.pi) * 0.9 
-    print(metadata_columns)
-
-    # ==========================
-    # Step 1: Load tree + metadata
-    # ==========================
-
-    print("[INFO] Loading tree and metadata...")
+    # LOAD TREE AND METADATA
+    vprint("Loading tree and obs columns...")
     tree = Phylo.read(tree_file, "newick")
     obs = adata.obs.copy()
 
-    print(type(tree))
 
-
-    # ==========================
-    # Step 2: Get ordered leaves (no overlaps)
-    # ==========================
-
+    # PRELIMINARY NAMING OF NODES
     # name the root
-    tree.root.name = "root"
+    def get_preliminary_names(tree):
+        tree.root.name = "root"
+        # give arbitrary unique names to non leaf nodes (leaf nods should have unique names already (eg cell ID))
+        i = 0
+        for node in tree.get_nonterminals():
+            if node.name != "root":
+                node.name = f"node_{i}"
+            i += 1
+        # assert there are no duplicate names in nonterminals
+        assert len(set(tree.get_nonterminals())) == len(tree.get_nonterminals())
+    get_preliminary_names(tree)
 
-    # give arbitrary unique names to non leaf nodes
-    i = 0
-    for node in tree.get_nonterminals():
-        if node.name != "root":
-            node.name = f"node_{i}"
-        i += 1
-    # assert there are no duplicate names in nonterminals
-    assert len(set(tree.get_nonterminals())) == len(tree.get_nonterminals())
 
-
-
+    # GET ORDERED LEAVES
     def ordered_terminals(tree):
         """Return leaf nodes in topologically consistent postorder."""
         return list(tree.get_terminals(order="postorder"))
-
     terminals = ordered_terminals(tree)
     n_leaves = len(terminals)
     leaf_names = [leaf.name for leaf in terminals]
+    vprint(f"Found {n_leaves} leaves (cells) in tree")
 
-    print(f"[INFO] Found {n_leaves} leaves (cells).")
-    print(f"dytpe of terminals: {type(terminals)}")
-    print(f"dtype of elemts of terminals: {type(terminals[0])}")
-    print(f"[INFO] found terminal leaves: {terminals}")
 
-    # debug
-    # get_max_tree depth
+    # FIND MAX DEPTH (needed for computing node radii in radial layout)
     def max_depth(node):
         if not node.clades:  # leaf
             return 0
         return 1 + max(max_depth(c) for c in node.clades)
-
     maximum_depth = max_depth(tree.root)
-    print("Max depth (edges from root):", maximum_depth)
+    vprint("Max depth of tree (n_edges from root):", maximum_depth)
 
-    # get dict that contains list of children
-    # ordered in a way where lower index = lower number of its children between itself and closest child that only has terminal children
-    def get_visitation_order(tree):
+
+    # GET VISITATION ORDER BY CLADE DEPTH
+    # This is a dictionary of tuples
+    # the key is a node's name, and the value is a list of tuples
+    # each tuple corresponds to one of the node's children
+    # the first entry in the tuple is the child (clade object)
+    # the second entry is the distance of that child to its closest descendant that only has terminal children
+    # i.e. if a node has a child that only has terminal children, then the second entry in the tuple 
+    # if a node only has terminal children, then the second entry in the tuple is 0
+    # if a node has a child that only has terminal children, then the second entry in the tuple is 1
+    # and so on
+    # The list is sorted in ascending order by distance
+    # this means that children with the lowest such distance are first in the list (and will be visited first in the radial layout
+    # (this leads to the radial layout mostly avoiding overlapping branches)
+    # IMPORTANT: this is invalidated if the nodes are renamed
+    def get_visitation_order_depth(tree):
         visitation_order = {}
 
         def recurse(node):
@@ -93,12 +83,11 @@ def visualize_tree(adata):
 
             distance_list = []
             for ntc in non_terminal_children:
-                distance_to_last_ntc = recurse(ntc) # this is the distance from the ntc to its closest ntc that only has terminal children (0 = the node itself only has terminal children, 1 = a directly connected node only has terminal children, etc.)
+                distance_to_last_ntc = recurse(ntc) # this is the distance from the ntc to its closest descendant that only has terminal children (0 = the node itself only has terminal children, 1 = a directly connected node only has terminal children, etc.)
                 distance_list.append((ntc, distance_to_last_ntc)) # tuple of child as clade object and its above described distance
 
             distance_list.sort(key=lambda x: x[1]) # sort in ascending order by distance
             visitation_order[node.name] = distance_list
-            print(visitation_order[node.name])
 
             return distance_list[0][1] + 1
         
@@ -106,18 +95,39 @@ def visualize_tree(adata):
 
         return visitation_order
     
-    
+    # ALTERNATIVE: GET VISITATION ORDER BY CLADE WIDTH
+    # wider clade as are visited liast
+    # more terminal nodes in clade mines it is wider
+    # also returns a dict of list(tuple, tuple, ...)
+    # almost everything is identical to get_visitation_order_depth
+    # but the number in the tuple refers to the total number of terminal nods in the child clade
+    # i.e. if a node (key) has a child clade that only has 1 terminal child, then the second entry in the tuple is 1
+    # tuples are sorted in ascending order by width for each key
+    def get_visitation_order_width(tree):
+        visitation_order = {}
+        for clade in tree.find_clades(order="level"):
+            children = list(clade.clades)
+            non_terminal_children = list(set(children).difference(set(terminals)))
+
+            width_list = []
+            for ntc in non_terminal_children:
+                width = len(list(ntc.get_terminals())) # width of the clade
+                width_list.append((ntc, width)) # tuple of child as clade object and its width
+            
+            width_list.sort(key=lambda x: x[1]) # sort in ascending order by width
+            visitation_order[clade.name] = width_list
+        
+        return visitation_order
+
+    if sort_order == "lowest_depth_first":
+        visitation_order = get_visitation_order_depth(tree) # use for set internal in compute_radial_layout
+    elif sort_order == "lowest_width_first":
+        visitation_order = get_visitation_order_width(tree)
 
 
-    
-
-
-    # ==========================
-    # Step 3: Assign radial coordinates
-    # ==========================
-
-
-
+    # GET PARENTS DICTIONARY
+    # the keys are node names, and the values are the clade object corresponding to its parent
+    # IMPORTANT: this is invalidated if nodes are renamed (or maybe not, but radial layout function works as is)
     def all_parents(tree):
         parents = {}
         for clade in tree.find_clades(order="level"):
@@ -126,26 +136,26 @@ def visualize_tree(adata):
         return parents
     parents = all_parents(tree) # key = node name, value = its parent's node name
 
-    visitation_order = get_visitation_order(tree) # use for set internal in compute_radial_layout
-    for key in visitation_order:
-        print(f"key: {key} value: {visitation_order[key]}")
         
-
+    # COMPUTE RADIAL LAYOUT OF TREE
+    # assigns polar coordinates to ever node in the tree to create a circular tree structure for plotting
+    # recursive function -> avoid heavy computation within (this is why we precompute parents and visitation orders -> retrieve before renaming of node to stay valid)
     def compute_radial_layout(tree, leaf_names, terminal_node_radius):
         """Compute (theta, r) coordinates for all nodes in the tree."""
         coords = {}
         for terminal in terminals:
-            coords[terminal.name] = (0, terminal_node_radius)
+            coords[terminal.name] = (0, terminal_node_radius) # set radius for all terminal nodes, angle is set later
 
-        # recursively assign internal node radii inward based on depth
-        def set_internal(node, depth, angle): # angle is the total sum of all angles up the current node on the entire tree (depth first)
+        # recursively assign internal node radii and angles based on related nodes (should start from root)
+        def set_internal(node, depth, angle): # angle is the total sum of all angles up the current node on the entire tree (so we avoid all collisions with previous nodes)
             if node.name not in leaf_names: # so all terminal nodes will be skipped (so we need not check again below)
                 
                 # before renaming, extract visitation order (remaning breaks the mapping)
                 if any(child not in terminals for child in node.clades): # if the current node only has terminal children, it will not have an entry in visitation_order
-                    local_visitation_order = visitation_order[node.name] # list of tuples, lower index = visit first (child (clade object), number of nodes that need to be travelled from that child to its closest possible descendant that only has terminal children)
+                    # extract visitation order for direct children of the current node
+                    local_visitation_order = visitation_order[node.name] # list of tuples, lower index = visit first (child (clade object), distance as described in get_visitation_order)
 
-                if node.name != "root":
+                if node.name != "root": # we do not want to rename the root node
                     
                     # NAME THE NODE
                     # define local vars
@@ -174,7 +184,7 @@ def visualize_tree(adata):
                     angled_terminal_children = 0
                     for tc in terminal_children:
                         _, og_radius = coords[tc.name] # get tuple values
-                        coords[tc.name] = (angle + ((target_circumference)/n_leaves)*angled_terminal_children, og_radius) # angle = to what the current node itself gets + modifer per terminal child of current node
+                        coords[tc.name] = (angle + ((target_circumference)/n_leaves)*angled_terminal_children, og_radius) # angle = to what the current node itself gets + modifer per terminal child of current node (assign new tuple as tuples are immutable)
                         angled_terminal_children += 1
                     # determine angle added because of terminal children
                     added_angle = angled_terminal_children * ((target_circumference)/n_leaves) # this is the total angle used by the terminal children, it should be added to that of each proper child to avoid overlaps
@@ -184,24 +194,20 @@ def visualize_tree(adata):
 
                 # RECURSIVE CALL
                 if any(child not in terminals for child in node.clades): # need to make sure that the node has non terminal children (visitation order contains no keys for terminal nodes)
-                    for child, distance in local_visitation_order: # already orderer so children with smaller distance to closest descendant with only terminal children are visited first
-                        if child not in terminal_children:
-                            total_angle = set_internal(child, depth + 1, total_angle)
+                    for child, distance in local_visitation_order: # already ordered so children with smaller distance to closest descendant with only terminal children are visited first
+                        if child not in terminal_children: # do not visit terminal nodes / leaf nodes
+                            total_angle = set_internal(child, depth + 1, total_angle) # total angle increased every time a a node with terminal children is visited
 
-                # RETURN (this can only trigger once all recurscive calls are done)
+                # RETURN (this can only trigger once all recurscive calls are done for the current node)
                 return total_angle
                     
-                
-
-        coords["root"] = (0, 0)
-        print(f"Root name: {tree.root.name}")
-        set_internal(tree.root, 0, 0)
-
+        coords["root"] = (0, 0) # seet base coords for root
+        set_internal(tree.root, 0, 0) # call the function on the root
         return coords
-
     coords = compute_radial_layout(tree, leaf_names, base_radius) # changes names, so parents dict must be recomputed
 
 
+    # MOVE INTERNAL NODES CLOSER TO TERMINAL NODES FOR VISIBILITY
     def lower_branch_node_radii(tree, node):
 
         # define local consts
@@ -214,7 +220,7 @@ def visualize_tree(adata):
             for ntc in non_terminal_children:
                 child_radius = lower_branch_node_radii(tree, ntc)
                 child_radii.append(child_radius)
-        min_child_radius = min(child_radii) if child_radii != [] else base_radius # if there are only terminal children, the will all have the base radius
+        min_child_radius = min(child_radii) if child_radii != [] else base_radius # if there are only terminal children, they will all have the base radius
 
         if node.name != "root": # avoid moving the root node
             # move node (all nodes descending from it have already been moved)
@@ -223,46 +229,30 @@ def visualize_tree(adata):
             coords[node.name] = (og_angle, new_radius)
 
             return new_radius        
-
-        
-    # move internal nodes closer to terminal nodes for visibility
     lower_branch_node_radii(tree, tree.root)
 
 
-    #DEBUGGING: print tree structure to json
-    parents = {}
-    for clade in tree.find_clades(order="level"):
-        for child in clade:
-            parents[child.name] = str(clade)
-    with open("parents_proper_names.json", "w") as f:
-        json.dump(parents, f, indent=4)
-
-    # convert polar → cartesian
+    # CONVERT POLAR TO XY COORDS
     xy_coords = {}
     for name, (theta, r) in coords.items():
         xy_coords[name] = (r * np.cos(theta), r * np.sin(theta))
 
 
-    # ==========================
-    # Step 4: Define color mappings for metadata
-    # ==========================
-
+    # DEFINE COLOR MAPS FOR OBS COLUMNS
     def map_colors(df, column):
         cats = df[column].unique()
         palette = sns.color_palette("tab10", len(cats)).as_hex()
         cmap = dict(zip(cats, palette))
         return df[column].map(cmap), cmap
-
     column_color_maps = {}
-    for col in metadata_columns:
-        obs[f"{col}_color"], cmap = map_colors(obs, col)
-        column_color_maps[col] = cmap
+    if obs_columns != []:
+        for col in obs_columns:
+            obs[f"{col}_color"], cmap = map_colors(obs, col)
+            column_color_maps[col] = cmap
 
-
-    # ==========================
-    # Step 5: Draw edges (gray lines)
-    # ==========================
-
+  
+    # DRAW EDGES AS GREY LINES
+    # draws an edge between any 2 connected nodes
     edge_traces = []
     for clade in tree.find_clades(order="level"):
         for child in clade.clades:
@@ -280,76 +270,78 @@ def visualize_tree(adata):
             )
 
 
-    # ==========================
-    # Step 6: Draw colored annotation rings
-    # ==========================
 
+
+
+
+
+    # DRAW ANNOTATION RINGS
+    # draws one ring per obs column
+    # different categories get different colors
     base_coords = np.array([xy_coords[n] for n in leaf_names])
     node_traces = []
+    if obs_columns != []:
+        vprint(f"Obs columns to draw annotation rings for: {obs_columns}")
+        for i, col in enumerate(obs_columns):
+            colors = obs.loc[leaf_names, f"{col}_color"]
+            xs, ys = base_coords[:, 0], base_coords[:, 1]
+            scale = 1 + ring_spacing * i  # expand outward for each ring
 
-    for i, col in enumerate(metadata_columns):
-        colors = ["black" for _ in leaf_names]                                  # obs.loc[leaf_names, f"{col}_color"]
-        xs, ys = base_coords[:, 0], base_coords[:, 1]
-        scale = 1 + ring_spacing * i  # expand outward for each ring
-
-        node_traces.append(
-            go.Scatter(
-                x=xs * scale,
-                y=ys * scale,
-                mode="markers",
-                marker=dict(size=4, color=colors, line=dict(width=0)),
-                name=col,
-                hovertext=[
-                  f"{leaf}"                        #f"{leaf}: {col}={obs.loc[leaf, col]}"
-                  for leaf in leaf_names                           # for leaf in leaf_names
-                ],
-                hoverinfo="text",
+            vprint(f"Drawing annotation ring for {col}")
+            node_traces.append(
+                go.Scatter(
+                    x=xs * scale,
+                    y=ys * scale,
+                    mode="markers",
+                    marker=dict(size=4, color=colors, line=dict(width=0)),
+                    name=col,
+                    hovertext=[
+                    f"{leaf}, {col}={obs.loc[leaf, col]}"                        #f"{leaf}: {col}={obs.loc[leaf, col]}"
+                    for leaf in leaf_names                           # for leaf in leaf_names
+                    ],
+                    hoverinfo="text",
+                )
             )
-        )
 
-    # DEBUG
-    # write coords and xycoords to json
-    with open("coords.json", "w") as f:
-        json.dump(coords, f, indent=3)
-    with open("xycoords.json", "w") as f:
-        json.dump(xy_coords, f, indent=3)
-    print("coords written to json")
-
-    # draw point at (0,0) for debugging
-    node_traces = []
-    node_traces.append(
-        go.Scatter(
-            x=[0],
-            y=[0],
-            mode="markers",
-            marker=dict(size=20, color="red", line=dict(width=0)),
-        )
-    )
-
-    # draw point at tree root location
+    # DRAW POINT AT ROOT LOCATION
     print(f"Tree root is at:\n{coords[tree.root.name]}")
     node_traces.append(
         go.Scatter(
             x= [int(xy_coords[tree.root.name][0])],   
             y= [int(xy_coords[tree.root.name][1])],
             mode="markers",
-            marker=dict(size=20, color="blue", line=dict(width=0)),
+            marker=dict(size=10, color="black", line=dict(width=0)),
+            hovertext=[tree.root.name],
+            hoverinfo="text",
         )
     )
 
-    # draw smaller point at each internal node
-    for clade in tree.find_clades(order="level"):
-        x, y = xy_coords.get(clade.name, (0, 0))
+ 
+    if debug:
+        # draw point at (0,0) for debugging
+        node_traces = []
         node_traces.append(
             go.Scatter(
-                x=[x],
-                y=[y],
+                x=[0],
+                y=[0],
                 mode="markers",
-                marker=dict(size=5, color="black", line=dict(width=0)),
-                hovertext=[clade.name],
-                hoverinfo="text",
+                marker=dict(size=20, color="red", line=dict(width=0)),
             )
         )
+
+        # draw smaller point at each internal node
+        for clade in tree.find_clades(order="level"):
+            x, y = xy_coords.get(clade.name, (0, 0))
+            node_traces.append(
+                go.Scatter(
+                    x=[x],
+                    y=[y],
+                    mode="markers",
+                    marker=dict(size=5, color="black", line=dict(width=0)),
+                    hovertext=[clade.name],
+                    hoverinfo="text",
+                )
+            )
 
     # ==========================
     # Step 7: Combine and render
@@ -368,17 +360,37 @@ def visualize_tree(adata):
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
 
-    fig.show()
-
-    # optional: save to file
-    # fig.write_image("cnv_tree_multiring.svg")
+    if show: fig.show()
+    if save: fig.write_image("cnv_tree_multiring.svg")
 
 
-    # DEBUG
-    """visitation_order = get_visitation_order(tree)
-    # dump to json for debugging
-    with open("visitation_order.json", "w") as f:
-        json.dump(visitation_order, f, indent=4)"""
+    if debug:
+        #DEBUGGING: write all parent-child relationships to json (with latest names)
+        parents = {}
+        for clade in tree.find_clades(order="level"):
+            for child in clade:
+                parents[child.name] = str(clade)
+        with open("parents_proper_names.json", "w") as f:
+            json.dump(parents, f, indent=4)
+
+        # DEBUGGING: write visitation order to json (with lates names)
+        visitation_order = get_visitation_order_depth(tree)
+        # change clade to string (clade is not json serializable)
+        visitation_order = [(str(clade), dist) for clade, dist in visitation_order]
+        # dump to json for debugging
+        with open("visitation_order.json", "w") as f:
+            json.dump(visitation_order, f, indent=4)
+
+        # DEBUGGING: write coords to json
+        with open("coords.json", "w") as f:
+            json.dump(coords, f, indent=3)
+        with open("xycoords.json", "w") as f:
+            json.dump(xy_coords, f, indent=3)
+
+
+
+
+
     
 
 def main():
@@ -433,17 +445,14 @@ if __name__ == "__main__":
     input_data_file = r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\reduced\reduced_PDAC_ductal_cell.h5ad"
     output_dir = "None"
     cnv_score_matrix = None
-    obs_columns = ["cancer_state"]
+    obs_columns = ["cancer_state", "cancer_state_inferred"]
     show = True
-    verbose = True
+    verbose = False
     vprint = hf.make_vprint(verbose)
-
-    # debugging
-    print(obs_columns)
 
     import sys
     adata = sc.read_h5ad(input_data_file)
-    visualize_tree(adata)
+    visualize_tree(adata, tree_file=r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\tree\PDAC_ductal_cnv_tree.nwk", obs_columns=obs_columns, debug=False)
     sys.exit(0)
 
     main()
