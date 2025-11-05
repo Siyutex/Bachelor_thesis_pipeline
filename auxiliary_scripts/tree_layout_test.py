@@ -25,6 +25,7 @@ def visualize_tree(adata):
     metadata_columns = obs_columns  # columns from adata.obs to show as rings
     ring_spacing = 0.025            # distance between concentric rings
     base_radius = 1.0               # radius of leaf circle
+    target_circumference = (2 * np.pi) * 0.9 
     print(metadata_columns)
 
     # ==========================
@@ -173,10 +174,10 @@ def visualize_tree(adata):
                     angled_terminal_children = 0
                     for tc in terminal_children:
                         _, og_radius = coords[tc.name] # get tuple values
-                        coords[tc.name] = (angle + ((2*np.pi)/n_leaves)*angled_terminal_children, og_radius) # angle = to what the current node itself gets + modifer per terminal child of current node
+                        coords[tc.name] = (angle + ((target_circumference)/n_leaves)*angled_terminal_children, og_radius) # angle = to what the current node itself gets + modifer per terminal child of current node
                         angled_terminal_children += 1
                     # determine angle added because of terminal children
-                    added_angle = angled_terminal_children * ((2*np.pi)/n_leaves) # this is the total angle used by the terminal children, it should be added to that of each proper child to avoid overlaps
+                    added_angle = angled_terminal_children * ((target_circumference)/n_leaves) # this is the total angle used by the terminal children, it should be added to that of each proper child to avoid overlaps
 
                 # TOTAL ANGLE
                 total_angle = angle + added_angle # combination of prior angle + gained angle from terminal children
