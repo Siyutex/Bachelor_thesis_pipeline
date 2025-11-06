@@ -1,7 +1,6 @@
 # This script runs the pipeline to preprocess mtx + tsv files from the 10x genomics pipeline and isolate epithelial cells from them and determine biological variance between patients
 # change RAW_DATA_DIR and outcome_storage for each run to reflect new input and what outcomes should be permanenlty saved
 
-import subprocess # needed for running other scripts
 import os # needed for file and directory operations
 from enum import Enum
 import shutil # needed for file storage operations
@@ -10,6 +9,7 @@ import sys # needed to exit the program
 from dataclasses import dataclass
 import helper_functions as hf
 from typing import Literal
+import numpy as np
 
 
 
@@ -197,18 +197,23 @@ def reduce_data(
 
 def cluster_and_plot(
         # necessary arguments
-        input_data_file: str, 
-        modules: list[Literal["projections+DEGs","projections", "pseudotime_vs_cnv"]],
+        modules: list[Literal["projections+DEGs","projections", "pseudotime_vs_cnv", "phylogenetic_tree"]],
 
         # general arguments
+        input_data_file: str = "", 
         cell_type: str = None, 
+        obs_annotations: list[str] = None,
 
         # UMAP / PCA plotting arguments
-        obs_annotations: list[str] = None, 
         layers: list[str] = ["X"],
         projection: Literal["UMAP", "PCA"]  = "UMAP",
         marker_file_path: str = None,
         root_cell_idx: int = None,
+
+        # Phylogenetic tree arguments
+        tree_file: str = None,
+        target_circumference: float =  0.9,
+        sort_order: Literal["lowest_width_first", "lowest_depth_first"] = "lowest_width_first",
 
         # auxiliary arguments
         show: bool = True,
@@ -221,10 +226,13 @@ def cluster_and_plot(
     Current modules include:
         - projections+DEGs, which will produce UMAP or PCA plots computed from the passed layer
           and colored by the passed obs annotations + leiden clusters. Also computes DEGs for categorical obs annotations + leiden clusters.
-          This module uses the following arguments: obs_annotations, layers, projection, marker_file_path, root_cell_idx
+          This module uses the following arguments: input_data_file, cell_type, obs_annotations, layers, projection, marker_file_path, root_cell_idx
         - projections, identical to projections+DEGs, but does not compute DEGs
         - pseudotime_vs_cnv, which will produce a plot scatterplot of cells, with cnvs on the y axis and pseudotime on the x axis.
-          This module uses the following arguments: None
+          This module uses the following arguments: input_data_file
+        - phylogenetic_tree, which will produce a phylogenetic tree for the passed tree_file. 
+          Can use obs annotations from anndata to draw colored annoation rings around the tree.
+          This module uses the following arguments: tree_file, target_circumference, sort_order, (input_data_file and obs_annotations for colored annotation rings)
 
     Input should be an h5ad file with obs annotations for each cell that should be used for clustering.
 
@@ -239,7 +247,7 @@ def cluster_and_plot(
     Does not add annotations, as it does not return an h5ad file.
 
     Parameters:
-        input_data_dir (str): path to h5ad file with obs annotations for each cell.
+        input_data_file (str): path to h5ad file with obs annotations for each cell.
         modules (list[Literal["projections", "pseudotime_vs_cnv"]]): list of modules in plotting scirpt to run.
         
         cell_type (str, optional): Name of the cell type in adata.obs["cell_type"] that should be isolated before plotting.
@@ -250,6 +258,13 @@ def cluster_and_plot(
         marker_file_path (str, optional): path to file with marker genes for each cell type. DEG analysis will not yield matrix plots if not provided.
         root_cell_idx (int, optional): Index of the root cell of pseudotime. Will be highlighted in pseudotime colored plot.
         
+        tree_file (str, optional): path to newick tree file. Required to plot a phylogenetic tree.
+        target_circumference (float, optional): Target circumference of the phylogenetic tree. 0.9 (90% of a circle = 2*pi*0.9)
+        sort_order (Literal["lowest_width_first", "lowest_depth_first"], optional): Sort order of leaves in phylogenetic tree. Defaults to "lowest_width_first". 
+            lowest_width_first: Clades with the lowest number of terminal nodes are visited first ("narrowest" clades first).
+            lowest_depth_first: Clades with the shortest path to a preterminal node (a node that only has terminal nodes as children) are visited first ("shallow" clades first).
+            (note that the "lowest_depth_first" option may also choose to visit a generally deep clade, which happens to have a single shallow child clade, first)
+
         show (bool, optional): whether to show the plots. Defaults to True.
         save_output (bool, optional): whether to save the plots permanently. Defaults to False.
         verbose (bool, optional): whether to print verbose output. Defaults to False.
@@ -260,6 +275,9 @@ def cluster_and_plot(
     # sanity check
     if show == False and save_output == False:
         raise ValueError("At least one of show or save_output must be True")
+    
+    # adjust parameters
+    target_circumference = target_circumference * 2 * np.pi
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have relevant folder, if not create it
     os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "plots"), exist_ok=True)
@@ -271,7 +289,7 @@ def cluster_and_plot(
 
     # run script and assign path to temporary output file
     print(f"Clustering and plotting: {input_data_file}")
-    hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Plotting.py"), input_data_file, output_temp_dir, [modules, cell_type, obs_annotations, layers, projection, marker_file_path, root_cell_idx, show, verbose])
+    hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Plotting.py"), input_data_file, output_temp_dir, [modules, cell_type, obs_annotations, layers, projection, marker_file_path, root_cell_idx, tree_file, target_circumference, sort_order, show, verbose, save_output])
 
     # naming happens in subprocess (relies on knowing which obs column was used)
 
@@ -978,8 +996,9 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC.h5ad"), verbose=True, corrected_representation=None, save_output=True)
         # output = reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", save_output=True, input_prefix="CNV_inferred", verbose=True, layers_to_remove=["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv"], max_considered_genes="all")
         # reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), "CNV_inferred", ["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, output_prefix="reduced", verbose=True)
-        # cluster_and_plot(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), ["projections"], layers=["X_scANVI_corrected", "X_scANVI_corrected_cnv"], marker_file_path=os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), obs_annotations=["cancer_state", "cancer_state_inferred", "cnv_score"], projection="UMAP", show=False, save_output=True, verbose=True)
-        get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), "X_scANVI_corrected_cnv", ["cancer_state", "cancer_state_inferred"], show=True, save_output=True, verbose=True)
+        # get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), "X_scANVI_corrected_cnv", ["cancer_state", "cancer_state_inferred"], show=True, save_output=True, verbose=True)
+        cluster_and_plot(["phylogenetic_tree"], tree_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "test trees", "50TNtree.nwk"), verbose=True, save_output=True, show=True, target_circumference=0.95)
+
 
         purge_tempfiles()
         sys.exit(0)
