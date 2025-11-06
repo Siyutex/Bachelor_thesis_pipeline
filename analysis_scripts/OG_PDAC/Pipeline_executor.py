@@ -705,8 +705,10 @@ def infer_CNVs(
 def get_phylogenetic_tree(
         input_data_file: str, 
         cnv_score_matrix: str,
-        color_by: list[str],
-        show: bool = True,
+        n_clades: int = 30,
+        grouping_metric: str = "cancer_state_inferred",
+        n_transition_clades: int = 10,
+        cutoff: float = 0.9,
         save_output: bool = False,
         input_prefix: str = "reduced",
         output_prefix: str = "transition_clades",
@@ -714,6 +716,7 @@ def get_phylogenetic_tree(
     
     """
     Create a neighbor joining tree of correlation distances between CNV profiles of cells.
+    Add normal / transitional / cancer annotations to cells. 
 
     Input should be an h5ad file containing the cnv_score matrix and the obs annotation that will be used to color the leaves of the tree.
 
@@ -728,9 +731,10 @@ def get_phylogenetic_tree(
     Parameters:
         input_data_dir (str): path to h5ad file.
         cnv_score_matrix (str): name of cnv_score matrix in adata.obsm.
-        color_by (list[str]): name of obs columns to color leaves of tree by.
-            (Several columns = several layers of color)
-        show (bool, optional): whether to show the plots. Defaults to True.
+        n_clades (int, optional): number of clades to split tree into for transition state determination. Defaults to 30.
+        grouping_metric (str, optional): annotation used to determine cancer vs non cancer cells for transition state determination. Defaults to "cancer_state_inferred".
+        n_transition_clades (int, optional): number of transition clades. Defaults to 10, i.e. 1/3 of n_clades.
+        cutoff (float, optional): clades with primary cell type fraction (cancer or non cancer) < cutoff will be "unsure". Defaults to 0.9.
         save_output (bool, optional): whether to save the plots permanently. Defaults to False.
         input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "reduced".
         output_prefix (str, optional): prefix for output file names. Defaults to "transition_clades".
@@ -739,9 +743,6 @@ def get_phylogenetic_tree(
     Returns:
         list[str]: list of paths to output files.
     """
-    # sanity check
-    if show == False and save_output == False:
-        raise ValueError("At least one of show or save_output must be True")
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have relevant folder, if not create it
     os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "tree"), exist_ok=True)
@@ -751,21 +752,26 @@ def get_phylogenetic_tree(
     output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "tree")
     output_temp_dir = os.path.join(TEMP_DIR, "tree")
 
+    output_file_list = []
+
     # run script and assign path to temporary output file
     print(f"Generating phylogenetic tree: {input_data_file}")
-    hf.execute_subprocess(os.path.join(SCRIPT_DIR, "phylogenetic_tree.py"), input_data_file, output_temp_dir, [cnv_score_matrix, color_by, show, verbose])
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "phylogenetic_tree.py"), input_data_file, output_temp_dir, [cnv_score_matrix, n_clades, grouping_metric, n_transition_clades, cutoff, verbose])
 
-    # naming happens in subprocess (relies on knowing which obs column was used)
-    # naming of h5ad happens here WIP
+    # rename output file (this is the h5ad file) (tree naming happens in subprocess)
+    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}.h5ad"))
+    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}.h5ad")
+
+    # add output file to output_file_list
+    output_file_list.append(temp_output_path)
 
     # if specified, permanently store a copy of the temporary output file
     if save_output == True:
         for file in os.listdir(output_temp_dir):
             shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, file))
 
-    # outputs will not be used programatically so no need to return list with output file paths
-    # this is why we also don't use input and output prefixes
-    return None
+    return output_file_list
+
 
 def isolate_and_HVGs(
         input_data_file: str, 
@@ -996,9 +1002,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC.h5ad"), verbose=True, corrected_representation=None, save_output=True)
         # output = reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", save_output=True, input_prefix="CNV_inferred", verbose=True, layers_to_remove=["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv"], max_considered_genes="all")
         # reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), "CNV_inferred", ["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, output_prefix="reduced", verbose=True)
-        # get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), "X_scANVI_corrected_cnv", ["cancer_state", "cancer_state_inferred"], show=True, save_output=True, verbose=True)
-        cluster_and_plot(["phylogenetic_tree"], tree_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "test trees", "50TNtree.nwk"), verbose=True, save_output=True, show=True, target_circumference=0.95)
-
+        # cluster_and_plot(["phylogenetic_tree"], tree_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "PDAC_ductal_cnv_tree.nwk"), verbose=True, save_output=True, show=True, target_circumference=0.95, input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), obs_annotations=["cancer_state_inferred"])
+        get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), "X_scANVI_corrected_cnv", save_output=True, verbose=True)
 
         purge_tempfiles()
         sys.exit(0)

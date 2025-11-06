@@ -5,6 +5,7 @@ General design:
 	- explain everything with comments and standardized docstrings
 	- wrap EVERY SCRIPT in if __name__ == "__main__" (to avoid fork bombs with subprocesses)
 	- try to avoid hardcoded strings as arguments (use variables / constants so it still matches if changed)
+		- create a dict with vars and names at the beginning so you can just swap out if needed
 	- pipeline executor files to run pipeline in modules
 	- pipeline executor handles conditionals and looping (eg differing folder structures), then have 
 	  different subprocesses for each condition, minimal conditionals in subprocesses.
