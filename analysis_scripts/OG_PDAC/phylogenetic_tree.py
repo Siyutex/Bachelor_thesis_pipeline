@@ -7,9 +7,9 @@ import numpy as np
 from scipy.spatial.distance import pdist, squareform
 from skbio import DistanceMatrix
 from skbio.tree import nj
-from skbio import TreeNode
 import helper_functions as hf
 import os
+from Bio import Phylo
 
 def build_tree(adata, cnv_score_matrix):# get cnv score matrix
     vprint("getting cnv score matrix")
@@ -40,55 +40,115 @@ def build_tree(adata, cnv_score_matrix):# get cnv score matrix
     tree = nj(dm)
     return tree
 
-def divide_tree(tree, n_clades) -> list[tuple[str, ...]]: 
+def divide_tree(tree, n_clades: int) -> list[tuple[str, ...]]: 
 
-    # iterate through tree from root to children
-        # 2 lists, one with current depth nodes, one with their parents
-        # check list length (save in dict (key = depth, value = list length))
-        # if current depth list length crosses n_clades
-            # take the clades in the list (current / parents) where abs(len - n_clades) is lower
-            # get leaf nodes in those clades, one tuple per clade, add tuples to list
-            # return list
+    def all_parents(tree):
+        parents = {}
+        for clade in tree.find_clades(order="level"):
+            for child in clade:
+                parents[child.name] = clade
+        return parents # dict key = node name, value = parent (clade object)
+
+    # visitation order (widest clades first)
+    def get_visitation_order_width(tree):
+        visitation_order = {}
+        for clade in tree.find_clades(order="level"):
+            children = list(clade.clades)
+            non_terminal_children = list(set(children).difference(set(terminals)))
+
+            width_list = []
+            for ntc in non_terminal_children:
+                width = len(list(ntc.get_terminals())) # width of the clade
+                width_list.append((ntc, width)) # tuple of child as clade object and its width
+            
+            width_list.sort(key=lambda x: x[1], reverse=True) # sort in descending order by width
+            visitation_order[clade.name] = width_list
+        
+        return visitation_order
+    
+    
+    # return the preterminal node reached if you always take the first child in the passed visitation order
+    def find_start_node(tree, visitation_order):
+        start_node = None
+        
+        def recurse(node):
+            nonlocal start_node
+            if all(child in terminals for child in node.clades):
+                start_node = node # set start node to the first node encountered that only has terminal children (ie the preterminal node)
+                return
+
+            next_node = visitation_order[node.name][0][0] # first tuple element in first tuple = clade object
+
+            recurse(next_node)
+
+        recurse(tree.root)
+
+        return start_node
+    
+
+    # recursive function to build clades
+    def recurse(node, child_n_leaves):
+        leaves = node.get_terminals() # leaves of current clade
+        n_leaves = len(leaves) # size of current clade
+        nonlocal clade_root
+
+
+        if any(leaf not in leaf_pool for leaf in leaves): # if any of the current node's leaves already belong to another clade
+            return False # this node cannot be chosen, its child must be chosen instead (if we choose this node, then overlapping clades happen)
+
+        if n_leaves >= (target_clade_size):
+            if abs(child_n_leaves - target_clade_size) < abs(n_leaves - target_clade_size): # if child is closer choose child
+                return False # false means this node is not chosen
+            else:
+                clade_leaf_sets.append(tuple(leaves)) # tuple of current clades leaves
+                for leaf in clade_leaf_sets[-1]: # newest entry in clade list = this entry
+                    leaf_pool.remove(leaf)
+                clade_root = node # set nonlocal variable "clade_root" to chosen node
+                return True # true means this node is chosen
+        
+        parent_chosen = recurse(parents[node.name], n_leaves) # recursive call on parent
+
+        if parent_chosen == False: # if the parent was not chosen (because this node is closer to ideal clade size)
+            clade_leaf_sets.append(tuple(leaves))
+            for leaf in clade_leaf_sets[-1]:
+                leaf_pool.remove(leaf)
+            clade_root = node # set nonlocal clade root to chosen node
+        return None # None means this node OR one of its ancestors was chosen
+    
 
     # sanity check
     if n_clades < 1:
         raise ValueError("n_clades must be at least 1")
     if n_clades == 1:
         return [tuple(tip.name for tip in tree.tips())]
+    
+    # local vars
+    terminals = list(tree.get_terminals())
+    parents = all_parents(tree)
+    leaf_pool = list(tree.get_terminals(order = "postorder")) # list of available leaves (names of the cells) for selection
+    n_leaves = len(leaf_pool) # total number of leaves in tree
+    target_clade_size = n_leaves / n_clades # target number of leaves in ideal clade
+    clade_leaf_sets = [] # list of chosen clades (list of str tuples)
 
-    # level-order traversal
-    current_level = [tree]
-    parent_level = []
-    depth = 0
-    level_counts = {}
+    # find start node
+    i = 0
+    while len(clade_leaf_sets) < n_clades and len(leaf_pool) > 1: # repeat until n_clades reached or no leaves left
+        print(f"Building clade {str(i)}")
+        visitation_order = get_visitation_order_width(tree)
+        start_node = find_start_node(tree, visitation_order) # find start node
+        clade_root = None # root of clade (will be set in recurse)
+        recurse(start_node, 0) # recurse upward from that node and add entry to clade_leaf_sets
+        parents[clade_root.name].clades.remove(clade_root) # remove clade root and its descendants from tree
+        i += 1
 
-    # Traverse levels until we exceed or reach n_clades
-    while current_level:
-        level_counts[depth] = len(current_level)
-        if len(current_level) >= n_clades:
-            break
-        # prepare next level
-        parent_level = current_level
-        next_level = []
-        for node in current_level:
-            next_level.extend(node.children)
-        current_level = next_level
-        depth += 1
+        if len(clade_leaf_sets) >= n_clades:
+            vprint("Interrupting loop, reached target number of clades.")
+            vprint("Number of leaves remaining: " + str(len(leaf_pool)))
+        elif len(leaf_pool) <= 1:
+            vprint("Interrupting loop, all leaves used.")
+            vprint("Number of clades built: " + str(len(clade_leaf_sets)))
 
-    # choose between this level and the previous one, whichever is closer
-    if not parent_level:
-        best_level = current_level
-    else:
-        if abs(len(current_level) - n_clades) < abs(len(parent_level) - n_clades):
-            best_level = current_level
-        else:
-            best_level = parent_level
 
-    # gather all leaves under each node at the best level
-    clade_leaf_sets = []
-    for node in best_level:
-        leaves = tuple(tip.name for tip in node.tips())
-        clade_leaf_sets.append(leaves)
 
     # info about clades
     vprint(f"Number of clades: {len(clade_leaf_sets)}")
@@ -166,6 +226,17 @@ def get_states(adata, metric, n_transition_clades, cutoff):
     return state_dict
 
 
+def get_preliminary_names(tree):
+    # name the root
+    tree.root.name = "root"
+    # give arbitrary unique names to non leaf nodes (leaf nods should have unique names already (eg cell ID))
+    i = 0
+    for node in tree.get_nonterminals():
+        if node.name != "root":
+            node.name = f"node_{i}"
+        i += 1
+    # assert there are no duplicate names in nonterminals
+    assert len(set(tree.get_nonterminals())) == len(tree.get_nonterminals())
 
 def main():
 
@@ -181,7 +252,11 @@ def main():
     print("saving tree to temp file")
     tree.write(os.path.join(output_dir, f"cnv_tree{os.path.basename(input_data_file).removesuffix('.h5ad')}.nwk"), format="newick")"""
     
-    tree = TreeNode.read(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\tree\PDAC_ductal_cnv_tree.nwk")
+    # change format to biopython (easier to manipulate here)
+    tree = Phylo.read(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\tree\PDAC_ductal_cnv_tree.nwk", format="newick")
+
+    # name tree nodes
+    get_preliminary_names(tree)
 
     # annotate adata with clades
     print("annotating adata with clades")
@@ -210,7 +285,7 @@ def main():
 
 if __name__ == "__main__":
     
-    input_data_file, output_dir, cnv_score_matrix, n_clades, metric, n_transition_clades, cutoff, verbose = hf.import_cmd_args(6)
+    input_data_file, output_dir, cnv_score_matrix, n_clades, metric, n_transition_clades, cutoff, verbose = hf.import_cmd_args(8)
     vprint = hf.make_vprint(verbose)
 
     main()
