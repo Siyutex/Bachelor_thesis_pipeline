@@ -705,6 +705,7 @@ def infer_CNVs(
 def get_phylogenetic_tree(
         input_data_file: str, 
         cnv_score_matrix: str,
+        distance_metric: Literal["euclidean", "correlation"] = "correlation",
         n_clades: int = 30,
         grouping_metric: str = "cancer_state_inferred",
         n_transition_clades: int = 10,
@@ -717,22 +718,29 @@ def get_phylogenetic_tree(
     """
     Create a neighbor joining tree of correlation distances between CNV profiles of cells.
     Add normal / transitional / cancer annotations to cells. 
+    Cells not assigned to transitional clades where the dominant cancer_state (according to grouping_metric) is < cutoff are labelled "unsure".
+    Some cells will not be assigned to a clade (due to the nature of the algorithm).
+    These cells will be assigned to the virtual calde "-1" instead, and are annotated with "unassigned" 
 
     Input should be an h5ad file containing the cnv_score matrix and the obs annotation that will be used to color the leaves of the tree.
 
+
     Annotations that need to be present:
-        - adata.obs[color_by]
+        - adata.obs[grouping_metric]
         - adata.obsm[cnv_score_matrix]
 
-    Outputs newick tree file and png image of the tree if save_output is True. Shows tree if show is True.
+    Outputs newick tree file and h5ad file with new annoations. Returns directory these files are temprorarily saved in.
+    Files saved permanently to OUTPUT_STORAGE_DIR/tree if save_output == True.
+    
+    Annotations added to adata.obs: [np.float: "cnv_clade", str:"cancer_state_inferred_tree"] (the clade a cell is in, on the phylogenetic tree (interger values from 0 to n_clades, or -1); a cell's inferred cancer state from the tree, includes "normal", "transitional", "cancer", "unsure", "unassigned")
 
-    ANNOTATIONS = WIP
 
     Parameters:
-        input_data_dir (str): path to h5ad file.
+        input_data_file (str): path to h5ad file.
         cnv_score_matrix (str): name of cnv_score matrix in adata.obsm.
+        distance_metric (Literal["euclidean", "correlation"], optional): metric used to compute distance between cells' cnv profiles for neighbor joining tree. Defaults to "correlation".
         n_clades (int, optional): number of clades to split tree into for transition state determination. Defaults to 30.
-        grouping_metric (str, optional): annotation used to determine cancer vs non cancer cells for transition state determination. Defaults to "cancer_state_inferred".
+        grouping_metric (str, optional): adata.obs annotation used to determine cancer vs non cancer cells for transition state determination. Defaults to "cancer_state_inferred".
         n_transition_clades (int, optional): number of transition clades. Defaults to 10, i.e. 1/3 of n_clades.
         cutoff (float, optional): clades with primary cell type fraction (cancer or non cancer) < cutoff will be "unsure". Defaults to 0.9.
         save_output (bool, optional): whether to save the plots permanently. Defaults to False.
@@ -756,21 +764,20 @@ def get_phylogenetic_tree(
 
     # run script and assign path to temporary output file
     print(f"Generating phylogenetic tree: {input_data_file}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "phylogenetic_tree.py"), input_data_file, output_temp_dir, [cnv_score_matrix, n_clades, grouping_metric, n_transition_clades, cutoff, verbose])
+    hf.execute_subprocess(os.path.join(SCRIPT_DIR, "phylogenetic_tree.py"), input_data_file, output_temp_dir, [cnv_score_matrix, distance_metric, n_clades, grouping_metric, n_transition_clades, cutoff, verbose])
 
-    # rename output file (this is the h5ad file) (tree naming happens in subprocess)
-    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}.h5ad"))
-    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}.h5ad")
+    # rename output file (this is the h5ad file) (tree naming happens in subprocess) 
+    os.rename(os.path.join(output_temp_dir, os.path.basename(input_data_file)), os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}.h5ad"))
 
     # add output file to output_file_list
-    output_file_list.append(temp_output_path)
+    output_file_list.append(output_temp_dir)
 
-    # if specified, permanently store a copy of the temporary output file
+    # if specified, permanently store a copy of the temporary output files from the output_temp_dir
     if save_output == True:
         for file in os.listdir(output_temp_dir):
             shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, file))
 
-    return output_file_list
+    return output_file_list # here we just forward the entire dir (tree + h5ad file, selection should happen outside of the function)
 
 
 def isolate_and_HVGs(
@@ -1002,8 +1009,11 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC.h5ad"), verbose=True, corrected_representation=None, save_output=True)
         # output = reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", save_output=True, input_prefix="CNV_inferred", verbose=True, layers_to_remove=["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv"], max_considered_genes="all")
         # reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), "CNV_inferred", ["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, output_prefix="reduced", verbose=True)
-        # cluster_and_plot(["phylogenetic_tree"], tree_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "PDAC_ductal_cnv_tree.nwk"), verbose=True, save_output=True, show=True, target_circumference=0.95, input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), obs_annotations=["cancer_state_inferred"])
-        get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), "X_scANVI_corrected_cnv", save_output=True, verbose=True)
+        
+        for metric in ["cancer_state_inferred"]:
+            get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), "X_scANVI_corrected_cnv", save_output=True, verbose=True, cutoff=0.8, grouping_metric=metric, distance_metric="euclidean")
+            cluster_and_plot(["phylogenetic_tree"], tree_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "cnv_tree_reduced_PDAC_ductal_cell.nwk"), verbose=True, save_output=True, show=True, target_circumference=0.95, input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), obs_annotations=[metric, "cancer_state_inferred_tree", "cnv_clade"])
+            purge_tempfiles()
 
         purge_tempfiles()
         sys.exit(0)

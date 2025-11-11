@@ -10,8 +10,10 @@ from skbio.tree import nj
 import helper_functions as hf
 import os
 from Bio import Phylo
+import warnings
 
-def build_tree(adata, cnv_score_matrix):# get cnv score matrix
+def build_tree(adata, cnv_score_matrix, distance_metric):# get cnv score matrix
+
     vprint("getting cnv score matrix")
     X = adata.obsm[cnv_score_matrix].toarray() # need to turn scipy sparse csr matrix into numpy array for pdist to work
 
@@ -30,14 +32,14 @@ def build_tree(adata, cnv_score_matrix):# get cnv score matrix
 
     # Compute distance matrix
     print("computing distance matrix")
-    D = squareform(pdist(X_jittered, metric='correlation')) # correlation = how similar cnv profiles are, invariant to magnitude of expression
+    D = squareform(pdist(X_jittered, metric=distance_metric)) # correlation = how similar cnv profiles are, invariant to magnitude of expression
     vprint(f"Percentage of NaNs in distance matrix: {np.isnan(D).sum() / D.size * 100}%")
     vprint(f"Number of NaNs in distance matrix: {np.isnan(D).sum()}")
     dm = DistanceMatrix(D, ids=labels)
 
     # Build neighbor-joining tree
     print("building neighbor-joining tree")
-    tree = nj(dm)
+    tree = nj(dm) # this algorithm is deterministic
     return tree
 
 def divide_tree(tree, n_clades: int) -> list[tuple[str, ...]]: 
@@ -100,18 +102,25 @@ def divide_tree(tree, n_clades: int) -> list[tuple[str, ...]]:
             if abs(child_n_leaves - target_clade_size) < abs(n_leaves - target_clade_size): # if child is closer choose child
                 return False # false means this node is not chosen
             else:
-                clade_leaf_sets.append(tuple(leaves)) # tuple of current clades leaves
-                for leaf in clade_leaf_sets[-1]: # newest entry in clade list = this entry
-                    leaf_pool.remove(leaf)
+                clade_leaf_sets.append(tuple(leaves)) # add leaves to clade (clade objects)
+                for leaf in clade_leaf_sets[-1]:
+                    leaf_pool.remove(leaf) # remove matching clade objects from leaf pool
+                clade_leaf_sets[-1] = tuple(leaf.name for leaf in clade_leaf_sets[-1]) # change clade objects to strings of the leaf name for downstream processing
                 clade_root = node # set nonlocal variable "clade_root" to chosen node
                 return True # true means this node is chosen
         
-        parent_chosen = recurse(parents[node.name], n_leaves) # recursive call on parent
+        if parents[node.name] != tree.root:
+            parent_chosen = recurse(parents[node.name], n_leaves) # recursive call on parent
+        else:
+            print("recursion reached root node of tree, interrupting recursion")
+            print(f"the tree root's child {node.name} was chosen as the calde root instead")
+            parent_chosen = False # the root cannot be chosen since that would include the entire tree so its child must be chosen instead
 
         if parent_chosen == False: # if the parent was not chosen (because this node is closer to ideal clade size)
-            clade_leaf_sets.append(tuple(leaves))
+            clade_leaf_sets.append(tuple(leaves)) # add leaves to clade (clade objects)
             for leaf in clade_leaf_sets[-1]:
-                leaf_pool.remove(leaf)
+                leaf_pool.remove(leaf) # remove matching clade objects from leaf pool
+            clade_leaf_sets[-1] = tuple(leaf.name for leaf in clade_leaf_sets[-1]) # change clade objects to strings of the leaf name for downstream processing
             clade_root = node # set nonlocal clade root to chosen node
         return None # None means this node OR one of its ancestors was chosen
     
@@ -159,69 +168,76 @@ def divide_tree(tree, n_clades: int) -> list[tuple[str, ...]]:
 
 
 def get_states(adata, metric, n_transition_clades, cutoff): 
-    # metric is one of adata.obs["cancer_state"] or adata.obs["cancer_state_inferred"]
+    # metric is one of adata.obs["cancer_state"] or adata.obs["cancer_state_inferred"] (tells you which cells are cancerous and which non_cancerous)
     # cutoff is eg: calde has 90% c 10% nc -> classified as c, 89% c 11% nc, classified as unsure 
     
-    # define entropy dict
-    # for each clade in adata cnv_clades
-        # get the number of c and nc cells according to metric
-        # compute entropy
-        # add entropy to dict (key = clade, value = entropy)
-    # define state dict
-    # choose n_transition_clades highest entropy clades and set the value of those clades in state dict to "transitional"
-    # set value of remaining clades with > cutoff nc cells as normal
-    # set value of remaining clades with > cutoff c cells as cancer
-    # return state dict
 
-    clades = np.asarray(adata.obs["cnv_clade"])
-    metrics = np.asarray(adata.obs[metric])
 
-    unique_clades = np.unique(clades)
+    vprint("Importing clade annotations")
+    vprint(f"Number of NaNs in cnv clade: {np.sum(np.isnan(adata.obs['cnv_clade']))}")
+
+    metrics = np.asarray(adata.obs[metric]) # array of metric column 
+    clades = np.asarray(adata.obs["cnv_clade"])# array of clade column
+    unique_clades = np.unique(clades) # array of unique clades
+    vprint(f"Unique clades found: {unique_clades} ")
 
     entropy_dict = {}
     frac_c_dict = {}
     frac_nc_dict = {}
 
-    for clade in unique_clades:
-        mask = clades == clade
-        clade_metrics = metrics[mask]
+    # compute entropy for each clade
+    for clade in unique_clades: 
+        if clade != -1.: # -1 is not a clade it is just all cells that couldn't be assgined to a clade
+            mask = clades == clade
+            clade_metrics = metrics[mask]
 
-        n_total = len(clade_metrics)
-        n_c = np.sum(clade_metrics == "c")
-        n_nc = np.sum(clade_metrics == "nc")
+            # get fractions of cancerous and non_cancerous cells in the clade
+            n_total = len(clade_metrics)
+            n_c = np.sum(clade_metrics == "cancerous")
+            n_nc = np.sum(clade_metrics == "non_cancerous")
 
-        if n_total == 0:
-            frac_c = 0.0
-            frac_nc = 0.0
-            entropy = 0.0
-        else:
-            frac_c = n_c / n_total
-            frac_nc = n_nc / n_total
-            # Shannon entropy
-            if frac_c in (0.0, 1.0):
+            if n_total == 0: # if no cells in clade
+                frac_c = 0.0
+                frac_nc = 0.0
                 entropy = 0.0
+                warnings.warn(f"No cells in clade {clade}, cannot compute entropy")
             else:
-                entropy = -(frac_c * np.log2(frac_c) + frac_nc * np.log2(frac_nc))
+                frac_c = n_c / n_total
+                frac_nc = n_nc / n_total
+                # Shannon entropy
+                if frac_c in (0.0, 1.0): # if clade is all cancerous or all non_cancerous then entropy is 0
+                    entropy = 0.0
+                else:
+                    entropy = -(frac_c * np.log2(frac_c) + frac_nc * np.log2(frac_nc))
 
-        entropy_dict[clade] = entropy
-        frac_c_dict[clade] = frac_c
-        frac_nc_dict[clade] = frac_nc
+            # assign values in dictionary for current clade
+            entropy_dict[clade] = entropy
+            frac_c_dict[clade] = frac_c
+            frac_nc_dict[clade] = frac_nc
+
+    vprint("Clade summary:")
+    for clade in unique_clades:
+        if clade != -1.:
+            vprint(f"Clade: {clade}, has {len(metrics[clades == clade])} cells. Cancerous fraction: {frac_c_dict[clade]}, Non-cancerous fraction: {frac_nc_dict[clade]}, Entropy: {entropy_dict[clade]}")
 
     # choose clades with highest entropy
     sorted_clades = sorted(entropy_dict, key=entropy_dict.get, reverse=True)
-    transition_clades = set(sorted_clades[:n_transition_clades])
+    transition_clades = set(sorted_clades[:n_transition_clades]) # get just top n_transition_clades clades with highest entropy
 
     # assign state per clade
     state_dict = {}
     for clade in unique_clades:
-        if clade in transition_clades:
-            state_dict[clade] = "transitional"
-        elif frac_c_dict[clade] >= cutoff:
-            state_dict[clade] = "cancer"
-        elif frac_nc_dict[clade] >= cutoff:
-            state_dict[clade] = "normal"
+        if clade != -1.: #  -1 is not a clade, is just all cells that couldn't be assigned to a clade
+            if clade in transition_clades:
+                state_dict[clade] = "transitional"
+            elif frac_c_dict[clade] >= cutoff:
+                state_dict[clade] = "cancer"
+            elif frac_nc_dict[clade] >= cutoff:
+                state_dict[clade] = "normal"
+            else:
+                state_dict[clade] = "unsure"
         else:
-            state_dict[clade] = "unsure"
+            state_dict[clade] = "unassigned" # these cells have not been assigned to a clade
 
     return state_dict
 
@@ -244,48 +260,48 @@ def main():
     print("reading adata")
     adata = sc.read_h5ad(input_data_file)
 
-    # Debugging
-    """# build neighbor joining tree from cnv matrix
-    tree = build_tree(adata, cnv_score_matrix)
+    # build neighbor joining tree from cnv matrix
+    # print statements inside function (nj tree, distance matrix)
+    tree = build_tree(adata, cnv_score_matrix, distance_metric)
 
     # Save tree
     print("saving tree to temp file")
-    tree.write(os.path.join(output_dir, f"cnv_tree{os.path.basename(input_data_file).removesuffix('.h5ad')}.nwk"), format="newick")"""
+    tree.write(os.path.join(output_dir, f"cnv_tree_{os.path.basename(input_data_file).removesuffix('.h5ad')}.nwk"), format="newick")
     
     # change format to biopython (easier to manipulate here)
-    tree = Phylo.read(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\tree\PDAC_ductal_cnv_tree.nwk", format="newick")
+    print("converting scipy tree to biopython tree")
+    tree = Phylo.read(os.path.join(output_dir, f"cnv_tree_{os.path.basename(input_data_file).removesuffix('.h5ad')}.nwk"), format="newick")
 
-    # name tree nodes
+    # name tree nodes and assert uniqueness (downstream functions depend on unqiue names for all nodes)
+    print("assigning unqiue names to tree nodes")
     get_preliminary_names(tree)
 
     # annotate adata with clades
     print("annotating adata with clades")
     clade_list = divide_tree(tree, n_clades) # list of string tuples, each tuple contains cell ids that belong to same clade
-    adata.obs["cnv_clade"] = None
+    # adata.obs["cnv_clade"] = None  !!! DO NOT INITIALIZE WITH NONE, this will lead to issues with saving to h5ad!!!
     for i, clade in enumerate(clade_list):
+        print(f"annotating clade {i}")
         mask = adata.obs_names.isin(clade)
-        adata.obs.loc[mask, "cnv_clade"] = i # values 0 to n_clades - 1
-
+        adata.obs.loc[mask, "cnv_clade"] = int(i) # values 0 to n_clades - 1
+    adata.obs["cnv_clade"] = adata.obs["cnv_clade"].fillna(-1) # replace cells with no clade by clade = -1 (so downstream throws no errors)
 
     # annotate adata with cancer_state_inferred_tree (normal, transitional, cancer)
     print("annotating adata with cancer_state_inferred_tree")
     states_dict = get_states(adata, metric, n_transition_clades, cutoff)
-    adata.obs["cancer_state_inferred_tree"] = None
     for clade, state in states_dict.items():
-        mask = adata.obs["clade"] == clade
+        mask = adata.obs["cnv_clade"] == clade
         adata.obs.loc[mask, "cancer_state_inferred_tree"] = state
 
-    # save adata
-    print("sacing adata to temp file")
-    adata.write(os.path.join(output_dir, os.path.basename(input_data_file)))
-    
-    # notify subrocess executor of toutput (copies everything in this folder in case of permanent storage)
+    # save results
+    print("Saving results...")
+    adata.write(os.path.join(output_dir, os.path.basename(input_data_file)), compression="gzip")
     print("Output: " + output_dir)
 
 
 if __name__ == "__main__":
     
-    input_data_file, output_dir, cnv_score_matrix, n_clades, metric, n_transition_clades, cutoff, verbose = hf.import_cmd_args(8)
+    input_data_file, output_dir, cnv_score_matrix, distance_metric, n_clades, metric, n_transition_clades, cutoff, verbose = hf.import_cmd_args(8)
     vprint = hf.make_vprint(verbose)
 
     main()
