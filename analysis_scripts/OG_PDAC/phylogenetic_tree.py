@@ -139,14 +139,15 @@ def divide_tree(tree, n_clades: int) -> list[tuple[str, ...]]:
     target_clade_size = n_leaves / n_clades # target number of leaves in ideal clade
     clade_leaf_sets = [] # list of chosen clades (list of str tuples)
 
-    # find start node
+    # create clades
     i = 0
     while len(clade_leaf_sets) < n_clades and len(leaf_pool) > 1: # repeat until n_clades reached or no leaves left
         print(f"Building clade {str(i)}")
-        visitation_order = get_visitation_order_width(tree)
+        visitation_order = get_visitation_order_width(tree) # compute visitation order for each run (so nodes in existing clades cannot be visited)
         start_node = find_start_node(tree, visitation_order) # find start node
         clade_root = None # root of clade (will be set in recurse)
         recurse(start_node, 0) # recurse upward from that node and add entry to clade_leaf_sets
+        vprint(f"Clade root for clade {i}: {clade_root.name}") # debugging info
         parents[clade_root.name].clades.remove(clade_root) # remove clade root and its descendants from tree
         i += 1
 

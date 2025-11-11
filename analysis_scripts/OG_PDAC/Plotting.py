@@ -420,8 +420,10 @@ def visualize_tree (tree_file, adata = None, obs_columns = None, ring_spacing: f
                         if re.match(pattern, element.name):
                             properly_named_siblings += 1 
                     # assign a proper name to the node
+                    old_name = node.name # debug
                     node.name = f"{str(parents[node.name].name)}_{properly_named_siblings + 1}" # name the node as the nth child of its parent (n = properly_named_siblings + 1, so if a parent has 5 childern, then it will be parent_1 for the first one that is checked, then parent_2, and so on up to root_1_1_1_2_5_1_7_4_2_2...)
-                
+                    name_mapping[old_name] = node.name # add new name to mapping
+
                 # ANGLE THE NODE
                 # angle the current node itself
                 coords[node.name] = (angle, (base_radius/maximum_depth) * depth)
@@ -547,6 +549,8 @@ def visualize_tree (tree_file, adata = None, obs_columns = None, ring_spacing: f
     # ASSIGN PRELIMINARY NAMES (needed for functions that work on the tree)
     vprint("Assigning preliminary names to tree nodes...")
     get_preliminary_names(tree)
+    # DEBUG: get mapping of preliminary names to actual names
+    name_mapping = {node.name: node.name for node in tree.get_nonterminals()} # dict with just preliminary names (values changed in get radial coords)
 
 
     # GET MORE GENERAL TREE PARAMTERS (needed for function behavior)
@@ -622,7 +626,6 @@ def visualize_tree (tree_file, adata = None, obs_columns = None, ring_spacing: f
     if debug:
         # draw point at (0,0) for debugging
         print("DEBUG: Drawing point at (0,0)")
-        node_traces = []
         node_traces.append(
             go.Scatter(
                 x=[0],
@@ -634,7 +637,7 @@ def visualize_tree (tree_file, adata = None, obs_columns = None, ring_spacing: f
 
         # draw smaller point at each internal node
         print("DEBUG: Drawing points at each internal node")
-        for clade in tree.find_clades(order="level"):
+        for clade in (list(tree.find_clades(order="level"))):
             x, y = xy_coords.get(clade.name, (0, 0))
             node_traces.append(
                 go.Scatter(
@@ -713,6 +716,11 @@ def visualize_tree (tree_file, adata = None, obs_columns = None, ring_spacing: f
             json.dump(coords, f, indent=3)
         with open("xycoords.json", "w") as f:
             json.dump(xy_coords, f, indent=3)
+
+        # DEBUGGING: write name mapping to json
+        print("DEBUG: Writing name mapping to json...")
+        with open("name_mapping.json", "w") as f:
+            json.dump(name_mapping, f, indent=3)
     
     return None
 
@@ -760,7 +768,7 @@ def main():
     # phylogenetic tree
     if "phylogenetic_tree" in modules:
         print("plotting phylogenetic tree...")
-        visualize_tree(tree_file, adata, obs_columns=obs_annotations, base_radius=1, target_circumference=target_circumference, sort_order=sort_order, show=show, save=save)
+        visualize_tree(tree_file, adata, obs_columns=obs_annotations, base_radius=1, target_circumference=target_circumference, sort_order=sort_order, show=show, save=save, debug=True)
     else:
         vprint("skipping phylogenetic_tree module...")
 

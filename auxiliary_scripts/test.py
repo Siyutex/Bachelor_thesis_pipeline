@@ -1,29 +1,7 @@
-from Bio.Phylo.BaseTree import Clade, Tree
-import random
+import scanpy as sc
 
-def random_binary_tree(n_leaves, name_prefix="T"):
-    """Generate a random binary tree with n_leaves terminal nodes."""
-    # start with leaf clades
-    leaves = [Clade(name=f"{name_prefix}{i+1}") for i in range(n_leaves)]
-    
-    # keep combining randomly until one root remains
-    while len(leaves) > 1:
-        # randomly choose two clades to merge
-        a, b = random.sample(leaves, 2)
-        leaves.remove(a)
-        leaves.remove(b)
-        # create a new parent clade
-        new_clade = Clade()
-        new_clade.clades.extend([a, b])
-        leaves.append(new_clade)
-    
-    # the last remaining clade is the root
-    return Tree(root=leaves[0])
+adata = sc.read_h5ad(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\reduced\reduced_PDAC_ductal_cell.h5ad")
 
-# Example usage
-tree = random_binary_tree(1500)
-from Bio import Phylo
-Phylo.draw_ascii(tree)
+adata = adata[:200,:] # first 200 cells
 
-# write the tree to a Newick file
-Phylo.write(tree, "1500TNtree.nwk", "newick")
+adata.write(r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\Data\output_storage\tree\test trees\partial_real_data\test.h5ad")
