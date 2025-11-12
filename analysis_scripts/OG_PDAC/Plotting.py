@@ -768,7 +768,7 @@ def main():
     # phylogenetic tree
     if "phylogenetic_tree" in modules:
         print("plotting phylogenetic tree...")
-        visualize_tree(tree_file, adata, obs_columns=obs_annotations, base_radius=1, target_circumference=target_circumference, sort_order=sort_order, show=show, save=save, debug=True)
+        visualize_tree(tree_file, adata, obs_columns=obs_annotations, base_radius=1, target_circumference=target_circumference, sort_order=sort_order, show=show, save=save, debug=False)
     else:
         vprint("skipping phylogenetic_tree module...")
 
