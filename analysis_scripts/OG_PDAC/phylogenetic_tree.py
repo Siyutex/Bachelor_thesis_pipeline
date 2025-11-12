@@ -11,6 +11,7 @@ import helper_functions as hf
 import os
 from Bio import Phylo
 import warnings
+import copy
 
 def build_tree(adata, cnv_score_matrix, distance_metric):# get cnv score matrix
 
@@ -109,7 +110,7 @@ def divide_tree(tree, n_clades: int) -> list[tuple[str, ...]]:
                 clade_root = node # set nonlocal variable "clade_root" to chosen node
                 return True # true means this node is chosen
         
-        if parents[node.name] != tree.root:
+        if parents[node.name] != internal_tree.root:
             parent_chosen = recurse(parents[node.name], n_leaves) # recursive call on parent
         else:
             print("recursion reached root node of tree, interrupting recursion")
@@ -129,12 +130,15 @@ def divide_tree(tree, n_clades: int) -> list[tuple[str, ...]]:
     if n_clades < 1:
         raise ValueError("n_clades must be at least 1")
     if n_clades == 1:
-        return [tuple(tip.name for tip in tree.tips())]
+        return [tuple(tip.name for tip in internal_tree.tips())]
+    
+    # define internal tree to not change original
+    internal_tree = copy.deepcopy(tree)
     
     # local vars
-    terminals = list(tree.get_terminals())
-    parents = all_parents(tree)
-    leaf_pool = list(tree.get_terminals(order = "postorder")) # list of available leaves (names of the cells) for selection
+    terminals = list(internal_tree.get_terminals())
+    parents = all_parents(internal_tree)
+    leaf_pool = list(internal_tree.get_terminals(order = "postorder")) # list of available leaves (names of the cells) for selection
     n_leaves = len(leaf_pool) # total number of leaves in tree
     target_clade_size = n_leaves / n_clades # target number of leaves in ideal clade
     clade_leaf_sets = [] # list of chosen clades (list of str tuples)
@@ -143,8 +147,8 @@ def divide_tree(tree, n_clades: int) -> list[tuple[str, ...]]:
     i = 0
     while len(clade_leaf_sets) < n_clades and len(leaf_pool) > 1: # repeat until n_clades reached or no leaves left
         print(f"Building clade {str(i)}")
-        visitation_order = get_visitation_order_width(tree) # compute visitation order for each run (so nodes in existing clades cannot be visited)
-        start_node = find_start_node(tree, visitation_order) # find start node
+        visitation_order = get_visitation_order_width(internal_tree) # compute visitation order for each run (so nodes in existing clades cannot be visited)
+        start_node = find_start_node(internal_tree, visitation_order) # find start node
         clade_root = None # root of clade (will be set in recurse)
         recurse(start_node, 0) # recurse upward from that node and add entry to clade_leaf_sets
         vprint(f"Clade root for clade {i}: {clade_root.name}") # debugging info
