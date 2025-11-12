@@ -1011,8 +1011,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), "CNV_inferred", ["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, output_prefix="reduced", verbose=True)
         
         for metric in ["cancer_state_inferred"]:
-            get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "tree", "test trees","partial_real_data", "test.h5ad"), "X_scANVI_corrected_cnv", save_output=True, verbose=True, cutoff=0.8, grouping_metric=metric, distance_metric="euclidean")
-            cluster_and_plot(["phylogenetic_tree"], tree_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "cnv_tree_test.nwk"), verbose=True, save_output=True, show=True, target_circumference=0.95, input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_test.h5ad"), obs_annotations=[metric, "cancer_state_inferred_tree", "cnv_clade"])
+            get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), "X_scANVI_corrected_cnv", save_output=True, verbose=True, cutoff=0.8, grouping_metric=metric, distance_metric="euclidean")
+            cluster_and_plot(["phylogenetic_tree"], tree_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "cnv_tree_reduced_PDAC_ductal_cell.nwk"), verbose=True, save_output=True, show=True, target_circumference=0.95, input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), obs_annotations=[metric, "cancer_state_inferred_tree", "cnv_clade"])
             purge_tempfiles()
 
         purge_tempfiles()
