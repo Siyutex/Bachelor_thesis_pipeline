@@ -172,6 +172,129 @@ def divide_tree(tree, n_clades: int) -> list[tuple[str, ...]]:
     return clade_leaf_sets
 
 
+def fix_clades(tree, clade_list):
+    # clade list is a list of string tuples (one tuple per clade, one string per cell ID in the clade)
+
+    # same visitation order as in divide tree (where clades are built)
+    def get_visitation_order_width(tree):
+        # key = node.name value = list of tuples of child as clade object and its width
+        # ever node in the tree has a key in this dict, even terminals (but their value is [])
+        visitation_order = {}
+        for clade in tree.find_clades(order="level"):
+            children = list(clade.clades)
+
+            width_list = []
+            for child in children:
+                width = len(list(child.get_terminals())) # width of the clade
+                width_list.append((child, width)) # tuple of child as clade object and its width
+            
+            width_list.sort(key=lambda x: x[1], reverse=True) # sort in descending order by width
+            visitation_order[clade.name] = width_list
+        
+        return visitation_order
+    
+
+    def get_leaf_sequence(tree, visitation_order):
+        # return a list with strings of leaf names ordered by visitation order (so leaf that is visited first is 1, then 2 ...)
+        leaf_sequence = []
+
+        def recurse(node):
+            if node.clades == []: # append terminal nodes to the list
+                leaf_sequence.append(node.name)
+                return
+
+            for i,_ in enumerate(node.clades): # recurse 
+                next_node = visitation_order[node.name][i][0]
+                recurse(next_node)
+
+        recurse(tree.root)
+        
+        return leaf_sequence
+    
+
+    def get_fixed_clade_list(clade_list, leaf_sequence):
+
+        def find_gaps(clade): # return a list of lists with cells at their proper indices according to leaf sequence, empty indices filled with 0
+            # find cell with lowest index in leaf_sequence
+            start_index = leaf_sequence.index(clade[0])
+            for cell in clade:
+                if cell in leaf_sequence and leaf_sequence.index(cell) < start_index:
+                    start_index = leaf_sequence.index(cell)
+            vprint(f"start index: {start_index}")
+            # find cell with highest index in leaf_sequence
+            end_index = leaf_sequence.index(clade[-1])
+            for cell in clade:
+                if cell in leaf_sequence and leaf_sequence.index(cell) > end_index:
+                    end_index = leaf_sequence.index(cell)
+            vprint(f"end index: {end_index}")
+            # create a list of that length
+            fixed_clade = [0 for _ in range(end_index - start_index + 1)] # (eg start = 0 end is 10, diff = 10, but 11 values)
+            vprint(f"fixed clade length: {len(fixed_clade)} (including 0s for gaps)")
+            vprint(f"clade length: {len(clade)}")
+            # fill list with clade names at correct index
+            for cell in clade:
+                try:
+                    index = leaf_sequence.index(cell) - start_index
+                    fixed_clade[index] = cell
+                except Exception as e:
+                    print(f"Cell {cell} has index {leaf_sequence.index(cell)} in leaf sequence but fixed_clade has length {len(fixed_clade)}")
+                    raise e
+            return fixed_clade
+
+        gapped_clade_list = []
+        for clade in clade_list:
+            gapped_clade = find_gaps(clade)
+            gapped_clade_list.append(gapped_clade)
+
+        # fixed_clade_list is now a list of lists, where each clade is a list of the string names of its leaf nodes, in the order at which they appear in the tree from back to front. If there is a gap in the sequence (ie another clade intersperses it), then that gap is filled with 0s)
+        # so now we just find the 0 gaps in each fixed clade and split the clade at each gap
+
+
+        fixed_clade_list = [] # this shall be a list where clades that have a gap are divided into n + 1 clades where n is the number of gaps
+        for clade in gapped_clade_list:
+            gap_start_indices = [] # first index of a gap
+            for i,entry in enumerate(clade):
+                if entry == 0 and clade[i-1] != 0  and i != 0: # make sure we are not checkoing the first index or it will wrap around to the last element
+                    gap_start_indices.append(i)
+
+            gap_end_indices = [] # last index of a gap
+            for i,entry in enumerate(clade):
+                if entry == 0 and clade[i+1] != 0 and i != len(clade)-1:
+                    gap_end_indices.append(i)
+
+            if gap_start_indices == [] and gap_end_indices == []: # if there are no gaps, no need to change the clade, just append as is
+                vprint(f"clade {gapped_clade_list.index(clade)} has no gaps, appending as is")
+                fixed_clade_list.append(clade)
+            else:
+                gaps = list(zip(gap_start_indices, gap_end_indices)) # list of tuples, each tuple contains the first and last index of a gap
+                vprint(f"gaps in clade {gapped_clade_list.index(clade)} are: {gaps}")
+                
+                index_list = [] # index list should contain the indeces of where proper cell names start and end in pairs of 2 -> merge to tuple
+                index_list.append(0)
+                for gap in gaps:
+                    index_list.append(gap[0]-1)
+                    index_list.append(gap[1]+1)
+                index_list.append(len(clade)-1) 
+                
+                filled_spaces = [[index_list[i], index_list[i+1]] for i in range(0, len(index_list)-1, 2)] # tuples of start and end indices of filled spaces (everything the is between the gaps, ie the cells)
+                vprint(f"filled spaces in clade {gapped_clade_list.index(clade)} are: {filled_spaces}")
+                for i,fs in enumerate(filled_spaces):
+                    fixed_clade_list.append(clade[fs[0]:fs[1]])
+
+        return fixed_clade_list
+               
+    internal_tree = copy.deepcopy(tree)
+    visitation_order = get_visitation_order_width(internal_tree)
+    leaf_sequence = get_leaf_sequence(internal_tree, visitation_order)
+    fixed_clade_list = get_fixed_clade_list(clade_list, leaf_sequence)
+
+    vprint(f"initial number of clades was: {len(clade_list)}")
+    vprint(f"final number of clades (clades split at gaps) is: {len(fixed_clade_list)}")
+    vprint(f"Clade lengths are {[len(clade) for clade in fixed_clade_list]}")
+
+    return fixed_clade_list
+
+
 def get_states(adata, metric, n_transition_clades, cutoff): 
     # metric is one of adata.obs["cancer_state"] or adata.obs["cancer_state_inferred"] (tells you which cells are cancerous and which non_cancerous)
     # cutoff is eg: calde has 90% c 10% nc -> classified as c, 89% c 11% nc, classified as unsure 
@@ -284,8 +407,9 @@ def main():
     # annotate adata with clades
     print("annotating adata with clades")
     clade_list = divide_tree(tree, n_clades) # list of string tuples, each tuple contains cell ids that belong to same clade
+    fixed_clade_list = fix_clades(tree, clade_list) # there might be some clades the surround other clades (i.e. the have "gaps"), this function splits those clades at the gaps
     # adata.obs["cnv_clade"] = None  !!! DO NOT INITIALIZE WITH NONE, this will lead to issues with saving to h5ad!!!
-    for i, clade in enumerate(clade_list):
+    for i, clade in enumerate(fixed_clade_list):
         print(f"annotating clade {i}")
         mask = adata.obs_names.isin(clade)
         adata.obs.loc[mask, "cnv_clade"] = int(i) # values 0 to n_clades - 1
