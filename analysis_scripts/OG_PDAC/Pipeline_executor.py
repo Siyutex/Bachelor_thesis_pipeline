@@ -708,8 +708,7 @@ def get_phylogenetic_tree(
         distance_metric: Literal["euclidean", "correlation"] = "correlation",
         n_clades: int = 30,
         grouping_metric: str = "cancer_state_inferred",
-        n_transition_clades: int = 10,
-        cutoff: float = 0.9,
+        transition_entropy_threshold: float = 0.8,
         save_output: bool = False,
         input_prefix: str = "reduced",
         output_prefix: str = "transition_clades",
@@ -717,8 +716,8 @@ def get_phylogenetic_tree(
     
     """
     Create a neighbor joining tree of correlation distances between CNV profiles of cells.
-    Add normal / transitional / cancer annotations to cells. 
-    Cells not assigned to transitional clades where the dominant cancer_state (according to grouping_metric) is < cutoff are labelled "unsure".
+    Add non_cancerous / transitional / cancerous annotations to cells. 
+    Cells are labelled normal / cancer if the entropy of the clade is below threshold based on dominant cell state in the calde.
     Some cells will not be assigned to a clade (due to the nature of the algorithm).
     These cells will be assigned to the virtual calde "-1" instead, and are annotated with "unassigned" 
 
@@ -732,7 +731,7 @@ def get_phylogenetic_tree(
     Outputs newick tree file and h5ad file with new annoations. Returns directory these files are temprorarily saved in.
     Files saved permanently to OUTPUT_STORAGE_DIR/tree if save_output == True.
     
-    Annotations added to adata.obs: [np.float: "cnv_clade", str:"cancer_state_inferred_tree"] (the clade a cell is in, on the phylogenetic tree (interger values from 0 to n_clades, or -1); a cell's inferred cancer state from the tree, includes "normal", "transitional", "cancer", "unsure", "unassigned")
+    Annotations added to adata.obs: [np.float: "cnv_clade", str:"cancer_state_inferred_tree"] (the clade a cell is in, on the phylogenetic tree (interger values from 0 to n_clades, or -1); a cell's inferred cancer state from the tree, includes "non_cancerous", "transitional", "cancerous", "unassigned")
 
 
     Parameters:
@@ -741,8 +740,7 @@ def get_phylogenetic_tree(
         distance_metric (Literal["euclidean", "correlation"], optional): metric used to compute distance between cells' cnv profiles for neighbor joining tree. Defaults to "correlation".
         n_clades (int, optional): number of clades to split tree into for transition state determination. Defaults to 30.
         grouping_metric (str, optional): adata.obs annotation used to determine cancer vs non cancer cells for transition state determination. Defaults to "cancer_state_inferred".
-        n_transition_clades (int, optional): number of transition clades. Defaults to 10, i.e. 1/3 of n_clades.
-        cutoff (float, optional): clades with primary cell type fraction (cancer or non cancer) < cutoff will be "unsure". Defaults to 0.9.
+        transition_entropy_threshold (float, optional): Clades with entropy (mixing of cancerous vs non_cancerous cells according to grouping_metric) above this value are considered transitional. Defaults to 0.8.
         save_output (bool, optional): whether to save the plots permanently. Defaults to False.
         input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "reduced".
         output_prefix (str, optional): prefix for output file names. Defaults to "transition_clades".
@@ -764,7 +762,7 @@ def get_phylogenetic_tree(
 
     # run script and assign path to temporary output file
     print(f"Generating phylogenetic tree: {input_data_file}")
-    hf.execute_subprocess(os.path.join(SCRIPT_DIR, "phylogenetic_tree.py"), input_data_file, output_temp_dir, [cnv_score_matrix, distance_metric, n_clades, grouping_metric, n_transition_clades, cutoff, verbose])
+    hf.execute_subprocess(os.path.join(SCRIPT_DIR, "phylogenetic_tree.py"), input_data_file, output_temp_dir, [cnv_score_matrix, distance_metric, n_clades, grouping_metric, transition_entropy_threshold, verbose])
 
     # rename output file (this is the h5ad file) (tree naming happens in subprocess) 
     os.rename(os.path.join(output_temp_dir, os.path.basename(input_data_file)), os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}.h5ad"))
@@ -1011,8 +1009,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), "CNV_inferred", ["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, output_prefix="reduced", verbose=True)
         
         for metric in ["cancer_state_inferred"]:
-            get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), "X_scANVI_corrected_cnv", save_output=True, verbose=True, cutoff=0.8, grouping_metric=metric, distance_metric="euclidean")
-            cluster_and_plot(["phylogenetic_tree"], tree_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "cnv_tree_reduced_PDAC_ductal_cell.nwk"), verbose=True, save_output=True, show=True, target_circumference=0.95, input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), obs_annotations=[metric, "cancer_state_inferred_tree", "cnv_clade"])
+            get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), "X_scANVI_corrected_cnv", save_output=True, verbose=True, grouping_metric=metric, distance_metric="euclidean", transition_entropy_threshold=0.8)
+            cluster_and_plot(["phylogenetic_tree"], tree_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "cnv_tree_reduced_PDAC_ductal_cell.nwk"), verbose=True, save_output=True, show=True, target_circumference=0.95, input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), obs_annotations=[metric, "cancer_state_inferred_tree"])
             purge_tempfiles()
 
         purge_tempfiles()

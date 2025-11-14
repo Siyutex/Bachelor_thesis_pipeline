@@ -295,7 +295,7 @@ def fix_clades(tree, clade_list):
     return fixed_clade_list
 
 
-def get_states(adata, metric, n_transition_clades, cutoff): 
+def get_states(adata, metric, transition_entropy_threshold): 
     # metric is one of adata.obs["cancer_state"] or adata.obs["cancer_state_inferred"] (tells you which cells are cancerous and which non_cancerous)
     # cutoff is eg: calde has 90% c 10% nc -> classified as c, 89% c 11% nc, classified as unsure 
     
@@ -348,9 +348,10 @@ def get_states(adata, metric, n_transition_clades, cutoff):
         if clade != -1.:
             vprint(f"Clade: {clade}, has {len(metrics[clades == clade])} cells. Cancerous fraction: {frac_c_dict[clade]}, Non-cancerous fraction: {frac_nc_dict[clade]}, Entropy: {entropy_dict[clade]}")
 
-    # choose clades with highest entropy
-    sorted_clades = sorted(entropy_dict, key=entropy_dict.get, reverse=True)
-    transition_clades = set(sorted_clades[:n_transition_clades]) # get just top n_transition_clades clades with highest entropy
+
+    # transition clades have entropy > threshold
+    assignable_clades = unique_clades[unique_clades != -1.]
+    transition_clades = [clade for clade in assignable_clades if entropy_dict[clade] >= transition_entropy_threshold]
 
     # assign state per clade
     state_dict = {}
@@ -358,12 +359,10 @@ def get_states(adata, metric, n_transition_clades, cutoff):
         if clade != -1.: #  -1 is not a clade, is just all cells that couldn't be assigned to a clade
             if clade in transition_clades:
                 state_dict[clade] = "transitional"
-            elif frac_c_dict[clade] >= cutoff:
-                state_dict[clade] = "cancer"
-            elif frac_nc_dict[clade] >= cutoff:
-                state_dict[clade] = "normal"
-            else:
-                state_dict[clade] = "unsure"
+            elif frac_c_dict[clade] > frac_nc_dict[clade]:
+                state_dict[clade] = "cancerous"
+            elif frac_c_dict[clade] < frac_nc_dict[clade]:
+                state_dict[clade] = "non_cancerous"
         else:
             state_dict[clade] = "unassigned" # these cells have not been assigned to a clade
 
@@ -417,7 +416,7 @@ def main():
 
     # annotate adata with cancer_state_inferred_tree (normal, transitional, cancer)
     print("annotating adata with cancer_state_inferred_tree")
-    states_dict = get_states(adata, metric, n_transition_clades, cutoff)
+    states_dict = get_states(adata, metric, transition_entropy_threshold)
     for clade, state in states_dict.items():
         mask = adata.obs["cnv_clade"] == clade
         adata.obs.loc[mask, "cancer_state_inferred_tree"] = state
@@ -430,7 +429,7 @@ def main():
 
 if __name__ == "__main__":
     
-    input_data_file, output_dir, cnv_score_matrix, distance_metric, n_clades, metric, n_transition_clades, cutoff, verbose = hf.import_cmd_args(8)
+    input_data_file, output_dir, cnv_score_matrix, distance_metric, n_clades, metric, transition_entropy_threshold, verbose = hf.import_cmd_args(8)
     vprint = hf.make_vprint(verbose)
 
     main()
