@@ -1,0 +1,2 @@
+here we forgot to put the parameter transform_batch to get_normalized_expression so the model
+return the expected expression for the origin batch (ie the opposite of batch correction)

@@ -1,0 +1,4 @@
+-CS / CSI (cancer_state, cancer_state_inferred: metric on which transition clade or not was inferred = metric used to calculate entropy)
+-euclid / corr (euclidean distance, correlation distance: distance metric used to get distance matrix that nj tree is inferred on)
+-nogap / gap (no gaps between clades, gaps between clades (a gap is when a clade is interspersed by a different clade eg: AAAAABBAAAAA, this is an artifact of 	how the clade division algorithm works, it is fixed post hoc with "fix_clades")
+-0.8entrcutoff (if present, the tree set all clades with entropy > 0.8 to transitional, and all others to cancer / normal based on the dominant state in the 	clade; if not present, transitional is defined as the top n (10 everywhere) highest entropy clades, cancer/ normal as non transition where the 	dominant cell type is above a threshold (90 / 80 percent))

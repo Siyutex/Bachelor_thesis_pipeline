@@ -1,0 +1,10 @@
+(note: even though it says "all cell types", these ure just ductal cells, because cnv isolates ductals and these are all plotted from the cnv data)
+
+
+This correction run failed for 2 reasons:
+
+1. I forgot to put transform_batch = x in get_normalized_gene_expression so I got the expeccted expression from the original batch, and not from 1 uniform batch
+2. I misunderstood that scvi and scanvi do indeed need raw counts, it is just explained weirdly in the docs (the log normalize and then DON'T use the lognormalized expression, instead they use a different layer with raw counts)
+
+
+I fixed these issues in the batch correction script and will run it again on the cluster

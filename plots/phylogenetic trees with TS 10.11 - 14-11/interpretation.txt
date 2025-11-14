@@ -1,0 +1,4 @@
+- non overlapping clades / no gap = proof of concept for post hoc clade seperation method
+- euclidean distance makes more sense logically, because it also takes into account CNV magnitude (ie cnv score). Correlation distance would cause cells with similar profiles but very different cnv scores (eg normal cell + cancer cell with same profile) to be closely related.
+Additionally, euclidean distance yields a nicer seperation of CSI states along leaves.
+- CSI is, logically speaking, the better metric, because it is backed by literature, and avoids "fake cancer" or "fake normal" cells (actually normal cells in the cancer batches and vice versa).
