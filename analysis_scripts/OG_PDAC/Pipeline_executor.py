@@ -201,7 +201,7 @@ def cluster_and_plot(
 
         # general arguments
         input_data_file: str = "", 
-        cell_type: str = None, 
+        selection_criteria: dict[str,list[str]] = {},
         obs_annotations: list[str] = None,
 
         # UMAP / PCA plotting arguments
@@ -226,7 +226,7 @@ def cluster_and_plot(
     Current modules include:
         - projections+DEGs, which will produce UMAP or PCA plots computed from the passed layer
           and colored by the passed obs annotations + leiden clusters. Also computes DEGs for categorical obs annotations + leiden clusters.
-          This module uses the following arguments: input_data_file, cell_type, obs_annotations, layers, projection, marker_file_path, root_cell_idx
+          This module uses the following arguments: input_data_file, selection_criteria, obs_annotations, layers, projection, marker_file_path, root_cell_idx
         - projections, identical to projections+DEGs, but does not compute DEGs
         - pseudotime_vs_cnv, which will produce a plot scatterplot of cells, with cnvs on the y axis and pseudotime on the x axis.
           This module uses the following arguments: input_data_file
@@ -237,7 +237,7 @@ def cluster_and_plot(
     Input should be an h5ad file with obs annotations for each cell that should be used for clustering.
 
     Annotations that need to be present:
-        - if cell_type is passed, adata.obs["cell_type"] (from cell_type_annotation.py)
+        - a column adata.obs for each key in selection_criteria (and the columns need to contain at least one instance of each string in the list that is the corresponding value)
         - a column in adata.obs for each passed obs annotation
         - the specified layers need to exist in adata.layers or adata.obsm
         - if modules includes "pseudotime_vs_cnv", adata.obs["dpt_pseudotime"] (from pseudotime_inference.py), adata.obs["cnv_score"], adata.obs["summed_cnvs] (from infer_CNV.py)
@@ -247,12 +247,12 @@ def cluster_and_plot(
     Does not add annotations, as it does not return an h5ad file.
 
     Parameters:
-        input_data_file (str): path to h5ad file with obs annotations for each cell.
         modules (list[Literal["projections", "pseudotime_vs_cnv"]]): list of modules in plotting scirpt to run.
         
-        cell_type (str, optional): Name of the cell type in adata.obs["cell_type"] that should be isolated before plotting.
-
+        input_data_file (str): path to h5ad file with obs annotations for each cell.
+        selection_criteria (dict[str,list[str]]): dict of obs annotations and list of entries in that obs annotation to limit cells to (cells have to fulfill all criteria to be kept)
         obs_annotations (list[str], optional): list of obs annotations to cluster. eg ["cell_type", "pseudotime", "cnv_score", ...].
+        
         layers (str, optional): Anndata layer or obsm keys to use as base for UMAP / PCA projection. Eg. ["X_cnv", "X_scvi_corrected", ...]. Defaults to ["X"], meaning adata.X will be used. 
         projection (literal ["UMAP", "PCA"], optional): projection to use for clustering. Defaults to "UMAP".
         marker_file_path (str, optional): path to file with marker genes for each cell type. DEG analysis will not yield matrix plots if not provided.
@@ -272,10 +272,12 @@ def cluster_and_plot(
     Returns:
         None, but saves files with plots if save_output is True
     """
-    # sanity check
+    # sanity checks
     if show == False and save_output == False:
         raise ValueError("At least one of show or save_output must be True")
-    
+    for value in selection_criteria.values(): # make sure values are actual lists and not strings (lists of characters)
+        assert isinstance(value, list), f"selection_criteria value {value} is not a list"
+
     # adjust parameters
     target_circumference = target_circumference * 2 * np.pi
 
@@ -289,7 +291,7 @@ def cluster_and_plot(
 
     # run script and assign path to temporary output file
     print(f"Clustering and plotting: {input_data_file}")
-    hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Plotting.py"), input_data_file, output_temp_dir, [modules, cell_type, obs_annotations, layers, projection, marker_file_path, root_cell_idx, tree_file, target_circumference, sort_order, show, verbose, save_output])
+    hf.execute_subprocess(os.path.join(SCRIPT_DIR, "Plotting.py"), input_data_file, output_temp_dir, [modules, selection_criteria, obs_annotations, layers, projection, marker_file_path, root_cell_idx, tree_file, target_circumference, sort_order, show, verbose, save_output])
 
     # naming happens in subprocess (relies on knowing which obs column was used)
 
@@ -1007,7 +1009,11 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC.h5ad"), verbose=True, corrected_representation=None, save_output=True)
         # output = reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", save_output=True, input_prefix="CNV_inferred", verbose=True, layers_to_remove=["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv"], max_considered_genes="all")
         # reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), "CNV_inferred", ["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, output_prefix="reduced", verbose=True)
-        cluster_and_plot(modules=["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), obs_annotations=["cancer_state","cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score"], layers=["X_scANVI_corrected", "X_scANVI_corrected_cnv"], save_output=True)
+        selection_criteria = {
+            "cell_type": ["ductal_cell"],
+            "cancer_state_inferred_tree": ["transitional"]
+        }
+        cluster_and_plot(modules=["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), obs_annotations=["cancer_state","cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["X_scANVI_corrected", "X_scANVI_corrected_cnv"], save_output=True, selection_criteria={}, projection="PCA")
         
 
         purge_tempfiles()

@@ -21,6 +21,7 @@ from skbio.tree import nj
 from Bio import Phylo
 # other
 import helper_functions as hf
+import warnings
 
 """def plot_with_external_legend(adata, projection: str, show=True, root_cell_idx: int = None, **kwargs):
 
@@ -63,6 +64,30 @@ import helper_functions as hf
 
     if show == True: plt.show() # closes the plot, so run after savefig
     plt.close()"""
+
+
+def limit_cells(adata, isolation_dict):
+    # isolation dict should have key = obs columns in adata, values = list of entries in that column to keep
+    # in the end this function will produce the intersection of all entries (eg cell_type: ["ductal"], cancer_state:["normal","transitional"] will isolate cells that or ductal and either normal or transitional)
+    
+    print("copyingadata")
+    internal_adata = adata.copy()
+
+    for obs_column, entry_list in isolation_dict.items():
+        print(f"limiting {obs_column} to {entry_list}")
+        if obs_column in internal_adata.obs.columns and all(entry in internal_adata.obs[obs_column].values for entry in entry_list): # check if column exists and needed values exist in it
+            print("limiting possible")
+            internal_adata = internal_adata[internal_adata.obs[obs_column].isin(entry_list)].copy()
+        elif obs_column not in internal_adata.obs.columns:
+            print("obs column not found")
+            warnings.warn(f"obs column {obs_column} not found in adata.obs, skipping to next column...")
+        elif not all(entry in internal_adata.obs[obs_column].values for entry in entry_list):
+            for entry in entry_list:
+                if entry not in internal_adata.obs[obs_column].values:
+                    print(f"entry {entry} not found in {obs_column}")
+                    warnings.warn(f"entry {entry} not found in adata.obs['{obs_column}'], skipping to next column...")
+
+    return internal_adata
 
 
 def matrix_to_anndata(adata, matrix_key):
@@ -116,7 +141,7 @@ def get_DEGs(adata, groupby):
         lines.append(f"DEGs for {group}: {names}")
         if show:
             print(f"DEGs for {group}: {names}")
-    with open(os.path.join(output_data_dir, f"DEGs_grouped_by_{groupby}_(just_{cell_type})_for_{os.path.basename(input_data_file).removesuffix('.h5ad')}.txt"), "w") as f:
+    with open(os.path.join(output_data_dir, f"DEGs_grouped_by_{groupby}_for_{os.path.basename(input_data_file).removesuffix('.h5ad')}.txt"), "w") as f:
         f.write("\n".join(lines))
 
     # also plot as matrixplot and save to tempdir (CURRENTLY DOES NOT WORK, perhaps too many marker genes?)
@@ -152,7 +177,7 @@ def plot_projection_and_DEGs(adata, layer):
     sc.pp.pca(internal_adata, svd_solver="arpack")
 
     vprint("finding neighbors...")
-    sc.pp.neighbors(internal_adata, use_rep="X_pca", n_neighbors=15)
+    sc.pp.neighbors(internal_adata, use_rep="X_pca")
 
     vprint("computing leiden clusters...")
     sc.tl.leiden(internal_adata, resolution=0.1) # uses neighbor graph
@@ -186,7 +211,7 @@ def plot_projection_and_DEGs(adata, layer):
             plt.scatter(umap_coords[root_cell_idx, 0], umap_coords[root_cell_idx, 1],
                 color='red', s=100, edgecolor='black', label='highlighted cell')
 
-        plt.savefig(os.path.join(output_data_dir, f"UMAP_of_{layer}_({'all_celltypes' if cell_type == None else "just_" + cell_type})_for_{os.path.basename(input_data_file).removesuffix('.h5ad')}.png"))
+        plt.savefig(os.path.join(output_data_dir, f"UMAP_of_{layer}_for_{os.path.basename(input_data_file).removesuffix('.h5ad')}.png"))
         
         if show: 
             plt.show()
@@ -200,7 +225,7 @@ def plot_projection_and_DEGs(adata, layer):
             plt.scatter(pca_coords[root_cell_idx, 0], pca_coords[root_cell_idx, 1],
                 color='red', s=100, edgecolor='black', label='highlighted cell')
 
-        plt.savefig(os.path.join(output_data_dir, f"PCA_of_{layer}_({'all_celltypes' if cell_type == None else "just_" + cell_type})_for_{os.path.basename(input_data_file).removesuffix('.h5ad')}.png"))
+        plt.savefig(os.path.join(output_data_dir, f"PCA_of_{layer}_for_{os.path.basename(input_data_file).removesuffix('.h5ad')}.png"))
         
         if show: 
             plt.show()
@@ -738,13 +763,12 @@ def main():
         adata = None
         vprint("input_data_file is not a path to a .h5ad file, setting adata to None.")
     
-    # limit anndata to cell type, if not present, exit
-    if cell_type is not None and cell_type in adata.obs["cell_type"].values:
-        print(f"isolating {cell_type} cells...")
-        adata = adata[adata.obs["cell_type"] == cell_type].copy()
-    elif cell_type is not None and cell_type not in adata.obs["cell_type"].values:
-        print(f"cell type {cell_type} not found in adata.obs['cell_type'], skipping to next batch...")
-        sys.exit(0)
+    # limit anndata to cells that fullfill all criteria
+    print("limiting cells...")
+    adata = limit_cells(adata, selection_criteria).copy()# which column to use and what entry in that column to limit cells to
+    print("writing to json (DEBUG)")
+    with open (os.path.join(output_data_dir, "selection_criteria.json"), "w") as f: # dump used selection criteria for the run to json
+        json.dump(selection_criteria, f, indent=3)
 
 
     # UMAP / PCA plots + DEGs for each layer
@@ -785,7 +809,7 @@ def main():
 if __name__ == "__main__":
     
     # import cmd args
-    input_data_file, output_data_dir, modules, cell_type, obs_annotations, layers, projection, marker_file_path, root_cell_idx, tree_file, target_circumference, sort_order, show, verbose, save = hf.import_cmd_args(11)
+    input_data_file, output_data_dir, modules, selection_criteria, obs_annotations, layers, projection, marker_file_path, root_cell_idx, tree_file, target_circumference, sort_order, show, verbose, save = hf.import_cmd_args(15)
     vprint = hf.make_vprint(verbose)
 
     if marker_file_path != None:
