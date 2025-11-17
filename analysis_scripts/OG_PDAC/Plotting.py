@@ -177,7 +177,7 @@ def plot_projection_and_DEGs(adata, layer):
     sc.pp.pca(internal_adata, svd_solver="arpack")
 
     vprint("finding neighbors...")
-    sc.pp.neighbors(internal_adata, use_rep="X_pca")
+    sc.pp.neighbors(internal_adata, use_rep="X_pca", n_neighbors=25, metric="euclidean") # these are the default params
 
     vprint("computing leiden clusters...")
     sc.tl.leiden(internal_adata, resolution=0.1) # uses neighbor graph
@@ -202,7 +202,7 @@ def plot_projection_and_DEGs(adata, layer):
     # create a figure with one plot per color, save to temp, show if show is True
     if projection == "UMAP":
         vprint("computing UMAP embedding...")
-        sc.tl.umap(internal_adata) # uses neighbor graph
+        sc.tl.umap(internal_adata, 0.2) # uses neighbor graph # default value for mindist is actually 0.5 acoording to the docs, not 0.1 (0.2 yielded best seperation of cancer / non cancer)
         sc.pl.umap(internal_adata, color=colored_by, show=False, ncols=n_cols)
 
         # highlight root cell

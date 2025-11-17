@@ -1013,7 +1013,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             "cell_type": ["ductal_cell"],
             "cancer_state_inferred_tree": ["transitional"]
         }
-        cluster_and_plot(modules=["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), obs_annotations=["cancer_state","cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["X_scANVI_corrected", "X_scANVI_corrected_cnv"], save_output=True, selection_criteria={}, projection="PCA")
+        cluster_and_plot(modules=["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), obs_annotations=["cancer_state","cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["X_scANVI_corrected", "X_scANVI_corrected_cnv"], save_output=True, selection_criteria=selection_criteria, projection="UMAP")
         
 
         purge_tempfiles()
