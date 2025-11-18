@@ -1005,15 +1005,16 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensebml_ids, r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\negative_markers.json", model="cellassign", verbose=True, save_output=True)
         # output_path_list = aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), save_output=True, verbose=True)
         # correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_PDAC.h5ad"), save_output=True, verbose=True, max_considered_genes="all")
-        # infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), save_output=True, input_prefix="batch_corrected", verbose=True, cell_type="ductal_cell", corrected_representation="X_scANVI_corrected")
         # infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC.h5ad"), verbose=True, corrected_representation=None, save_output=True)
         # output = reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", save_output=True, input_prefix="CNV_inferred", verbose=True, layers_to_remove=["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv"], max_considered_genes="all")
         # reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), "CNV_inferred", ["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, output_prefix="reduced", verbose=True)
+        
+        
+        infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), save_output=True, input_prefix="batch_corrected", verbose=True, cell_type="ductal_cell", corrected_representation=None, output_prefix="test_CNV")
         selection_criteria = {
             "cell_type": ["ductal_cell"],
-            "cancer_state_inferred_tree": ["transitional"]
         }
-        cluster_and_plot(modules=["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), obs_annotations=["cancer_state","cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["X_scANVI_corrected", "X_scANVI_corrected_cnv"], save_output=True, selection_criteria=selection_criteria, projection="UMAP")
+        cluster_and_plot(modules=["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR,"CNV", "test_CNV_PDAC_ductal_cell.h5ad"), obs_annotations=["cancer_state","cancer_state_inferred"], layers=["X"], save_output=True, selection_criteria=selection_criteria, projection="UMAP")
         
 
         purge_tempfiles()
