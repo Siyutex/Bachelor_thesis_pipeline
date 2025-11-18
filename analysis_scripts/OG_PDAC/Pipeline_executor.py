@@ -785,19 +785,21 @@ def isolate_and_HVGs(
         main_layer: str = None,
         max_considered_genes: int | Literal["all"] = 3000,
         batch_threshold: float = 0.3,
+        isolation_dict: dict[str, list[str]] = {},
         save_output: bool = False,
         input_prefix: str = "CNV_inferred",
         output_prefix: str = "isolated",
         verbose: bool = False) -> list[str]:
     """ 
     Only keep the main layer in adata.X and optionally select HVGs for it. Purge everything else.
+    Optionally limit cells to conditions in isolation_dict.
     (all other adata.layers and adata.obsm entries are removed, only main_layer, adata.obs, and adata.var are kept)
-    (NOTE: HVG selection only affects the main layer, obsm matrices that are kept are unaffected)
 
     Input should be an h5ad file.
 
     Requires the following annotations to be present: 
         - the main_layer (if main_layer is not None) in adata.X, adata.layers or adata.obsm
+        - all conditions in isolation_dict must have a column in adata.obs with that has at least one entry of the type to isolate (e.g. cancer_state: ["normal", "transitional"] -> requires adata.obs["cancer_state"].unqiue() == ["normal", "transitional", ...])
 
     Outputs a gzip compressed h5ad file with, optionally, reduced layers / obsms and HVGs.
     Output files are named {output_prefix}_{basename}{suffix}.h5ad.
@@ -811,6 +813,7 @@ def isolate_and_HVGs(
         max_considered_genes (int, optional): maximum number of HVGs to consider. Defaults to 3000.
             if this is set to "all", no HVGs will be selected.
         batch_threshold (float, optional): relative amount of batches a gene must be an HVG in to be kept. Defaults to 0.3.
+        isolation_dict (dict[str, list[str]], optional): dictionary of conditions to isolate, each key is a condition and each value is a list of the types to isolate. Defaults to {}
         save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/reduced. Defaults to False.
         input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "batch_corrected".
         output_prefix (str, optional): prefix for output file names. Defaults to "CNV_inferred".
@@ -833,7 +836,7 @@ def isolate_and_HVGs(
 
     # run script and assign path to temporary output file
     print(f"Reducing {input_data_file}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "matrix_isolation_HVGs.py"), input_data_file, output_temp_dir, [main_layer, max_considered_genes, batch_threshold, verbose])
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "matrix_isolation_HVGs.py"), input_data_file, output_temp_dir, [main_layer, max_considered_genes, batch_threshold, isolation_dict, verbose])
 
     # rename output file
     os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}{"_HVG" if max_considered_genes != "all" else ""}{"_X_is_" + main_layer}.h5ad"))
@@ -1014,14 +1017,12 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # output = reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", save_output=True, input_prefix="CNV_inferred", verbose=True, layers_to_remove=["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv"], max_considered_genes="all")
         # reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), "CNV_inferred", ["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, output_prefix="reduced", verbose=True)
         
-        
-        selection_criteria = {
-            "cell_type": ["ductal_cell"],
-        }
-        cluster_and_plot(modules=["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR,"CNV", "uncorrected_CNV_PDAC_ductal_cell.h5ad"), obs_annotations=["cancer_state","cancer_state_inferred"], layers=["X", "X_scANVI_corrected"], save_output=True, selection_criteria=selection_criteria, projection="UMAP", verbose=True)
-        
 
-        # infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), origin_clade=1, input_prefix="transition_clades", verbose=True, save_output=True)
+        isolation_dict = {
+            "cancer_state_inferred_tree": ["transitional"],
+        }
+        isolate_and_HVGs(os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", max_considered_genes=3000, batch_threshold=0.3, isolation_dict=isolation_dict, save_output=True, input_prefix="transition_clades", verbose=True)
+        
 
         purge_tempfiles()
         sys.exit(0)
