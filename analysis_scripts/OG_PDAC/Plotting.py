@@ -10,6 +10,7 @@ import sys
 import os
 import re
 from typing import Literal
+import warnings
 # plotting
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -21,7 +22,7 @@ from skbio.tree import nj
 from Bio import Phylo
 # other
 import helper_functions as hf
-import warnings
+
 
 """def plot_with_external_legend(adata, projection: str, show=True, root_cell_idx: int = None, **kwargs):
 
@@ -70,21 +71,21 @@ def limit_cells(adata, isolation_dict):
     # isolation dict should have key = obs columns in adata, values = list of entries in that column to keep
     # in the end this function will produce the intersection of all entries (eg cell_type: ["ductal"], cancer_state:["normal","transitional"] will isolate cells that or ductal and either normal or transitional)
     
-    print("copyingadata")
+    vprint("copying adata")
     internal_adata = adata.copy()
 
     for obs_column, entry_list in isolation_dict.items():
-        print(f"limiting {obs_column} to {entry_list}")
+        vprint(f"limiting {obs_column} to {entry_list}")
         if obs_column in internal_adata.obs.columns and all(entry in internal_adata.obs[obs_column].values for entry in entry_list): # check if column exists and needed values exist in it
-            print("limiting possible")
+            vprint("limiting possible")
             internal_adata = internal_adata[internal_adata.obs[obs_column].isin(entry_list)].copy()
         elif obs_column not in internal_adata.obs.columns:
-            print("obs column not found")
+            vprint("obs column not found")
             warnings.warn(f"obs column {obs_column} not found in adata.obs, skipping to next column...")
         elif not all(entry in internal_adata.obs[obs_column].values for entry in entry_list):
             for entry in entry_list:
                 if entry not in internal_adata.obs[obs_column].values:
-                    print(f"entry {entry} not found in {obs_column}")
+                    vprint(f"entry {entry} not found in {obs_column}")
                     warnings.warn(f"entry {entry} not found in adata.obs['{obs_column}'], skipping to next column...")
 
     return internal_adata

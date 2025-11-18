@@ -10,7 +10,7 @@ from scipy.sparse import issparse
 
 def check_normalize(adata):
     # normalize if not already
-    if not hf.is_normalized(adata):
+    if not hf.is_normalized(adata, layer=corrected_representation):
         vprint("Normalizing adata...")
         sc.pp.normalize_total(adata, target_sum=1e4)
     else:
@@ -25,7 +25,7 @@ def prepare_for_pseudotime(adata):
 
     # compute neighbors, provides neighborhood graph which is used by diffmap
     vprint("Computing neighbors...")
-    sc.pp.neighbors(adata, n_neighbors=15, n_pcs=50, use_rep="X_pca")
+    sc.pp.neighbors(adata, n_neighbors=15, n_pcs=50, use_rep="X_pca") # uses same n_neighbous as in UMAP plots so represenation is accurate
 
     # compute diffmap (automatically uses default fields created by neighbors)
     # random walks from each cell to all other cells to get distances
@@ -33,9 +33,9 @@ def prepare_for_pseudotime(adata):
     sc.tl.diffmap(adata, n_comps=15)
 
 
-def annotate_root_cell(adata, corrected_representation):
+def annotate_root_cell_mincnv(adata, corrected_representation):
     """
-    Returns index of root cell
+    Returns index of root cell. Root cell will be the cell with lowest cnv sum (based on gene_values_cnv)
     """
 
     # filter adata, use copy() to create new objects, not vies; assign to same name so old adata gets overridden and garbage collected
@@ -53,14 +53,6 @@ def annotate_root_cell(adata, corrected_representation):
     nan_columns = np.isnan(X).all(axis=0)
     X = X[:, ~nan_columns]
 
-    """# compute mean cnv value for ea
-    vprint("Computing mean cnvs...")
-    mean_cnvs = np.mean(X, axis=1)
-    print(f"Mean cnvs: {mean_cnvs[:5]}")"""
-
-
-
-
     # compute mean cnv for each gene
     vprint("Computing mean cnvs per gene...")
     median_cnvs_per_gene = np.median(X, axis=0)
@@ -70,22 +62,34 @@ def annotate_root_cell(adata, corrected_representation):
     sum_abs_dev = np.sum(np.abs(X - median_cnvs_per_gene), axis=1)
 
     best_cell_idx = np.argmin(sum_abs_dev)
-
-
-
-
-
-
-    """# find index of cell with smallest mean cnv (might be the least canncerous cell)
-    vprint("Determining best root cell...")
-    best_cell_idx = np.argmin(mean_cnvs)"""
-
-    print(f"Best cell index: {best_cell_idx}")
+    vprint(f"Best cell index: {best_cell_idx}")
 
     return best_cell_idx
 
 
-def main(input_data_file, output_data_dir, corrected_representation):
+def annotate_root_cell_clade(adata, origin_clade):
+    """
+    return root cell index. Root cell is a random cell from the given clade
+    """
+    # make sure clade column exists
+    if "cnv_clade" not in adata.obs.columns:
+        raise ValueError("adata.obs must have a column named 'cnv_clade'")
+
+    # make sure target clade exists
+    if origin_clade not in adata.obs["cnv_clade"].unique():
+        raise ValueError(f"Clade {origin_clade} does not exist in adata.obs['cnv_clade']")
+
+    # pick random cell where adata.obs["cnv_clade"] == origin_clade
+    root_cell_idx = np.random.choice(np.where(adata.obs["cnv_clade"] == origin_clade)[0])
+    vprint(f"Root cell index: {root_cell_idx}")
+
+    return root_cell_idx
+
+
+
+def main(input_data_file, output_data_dir, corrected_representation, origin_clade):
+
+    adata = sc.read_h5ad(input_data_file)
 
     # import adata
     internal_adata = adata.copy()
@@ -100,7 +104,7 @@ def main(input_data_file, output_data_dir, corrected_representation):
 
     # annotate root cell
     print("Annotating root cell...")
-    root_idx = annotate_root_cell(internal_adata, corrected_representation)
+    root_idx = annotate_root_cell_clade(internal_adata, origin_clade)
     adata.uns["iroot"] = root_idx
     internal_adata.uns["iroot"] = root_idx
 
@@ -122,15 +126,9 @@ def main(input_data_file, output_data_dir, corrected_representation):
 
 if __name__ == "__main__":
     # import cmd args
-    input_data_file, output_data_dir, corrected_representation, verbose = hf.import_cmd_args(4)
+    input_data_file, output_data_dir, corrected_representation, origin_clade, verbose = hf.import_cmd_args(4)
     vprint = hf.make_vprint(verbose)
 
-    # import adata
-    adata = sc.read_h5ad(input_data_file)
-
-    if corrected_representation == None:
-        corrected_representation = "X"
-
-    main(input_data_file, output_data_dir, corrected_representation)
+    main(input_data_file, output_data_dir, corrected_representation, origin_clade)
 
     

@@ -9,7 +9,8 @@ GRN_rule_inference:
     will not be good predictors for splits (gini worse than entropy). BUT, since I only work
     on HVGs, it would be reasonable to assume that the class (1 or 0) distribution is somewhat
     even in target (really in all) genes. 
-Cell_type_annotation:
-  - might not be very accurate (eg neurons included in epithelial), check by clustering epi isolated
+Batch_correction:
+  - might be a bit too aggressive so normal cell get too close to cancer (maybe also an issue with reference batch only having either normal or cancer cells)
+      (not that bad though, so go back to this if published; also quite hard to fix without reference batch that has c and nc)
 Pseudotime: 
   - smallest mean cnv might not be the best proxy for a "normal" cell as the root cell

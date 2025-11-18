@@ -1,0 +1,15 @@
+corrected folder just has UMAP from scanvi corrected rep, cnvs -> cancer_state_inferred inferred from corrected rep.
+uncorrected folder has cancer_state_inferred inferred from raw X and has a UMAP of raw rep and scanvi rep.
+
+All use default params other than mindist = 0.2 (nneighbours 15, euclidean for neighours function)
+
+we can see that the known issue occurs where umap plots that should look the same do not look the same (X_scANVI_corrected UMAP from corrected and uncorrected folder)
+prbly some issue with shifting around matrices.
+
+But we can see regardless that the cancer_state_inferred from just X overlaps a lot more with the cancer_state than the CSI from the corrected rep.
+This is prbly because the correction skews cancerous vs normal cells (eg it pulls some cells from normal batches to cancer and then the get CSId as "cancerous)
+
+regardless, we cannot really fix this because using x for cnv inferrence is not an option as there are massive batch effects as can be seen in state_of_pipeline_24.10
+so the only way to fix it would maybe be to have a reference batch to correct to that has both normal and cancer cells but we do not have this,
+so we must live with it.
+

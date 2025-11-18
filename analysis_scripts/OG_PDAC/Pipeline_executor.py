@@ -851,18 +851,22 @@ def isolate_and_HVGs(
 
 def infer_pseudotime(
         input_data_file: str, 
+
         corrected_representation: str = None,
+        origin_clade: int = 1,
+
         save_output: bool = False,
         input_prefix: str = "CNV_inferred",
         output_prefix: str = "pseudotime_inferred",
         verbose: bool = False) -> list[str]:
     """ 
-    Infer pseudotimefrom a CNV inferred h5ad file. Chooses the cell with least CNVs as root cell.
+    Infer pseudotimefrom a CNV inferred h5ad file.
 
-    Input should be a CNV inferred h5ad file. CNVs are necessary for root cell selection.
+    Input should be a an h5ad file. Ideally with transition clades isolated.
 
     Requires the following annotations to be present:
-        - adata.obsm[f"{corrected_representation}_gene_values_cnv"] (from infer_CNV.py)
+        - if corrected_representation is passed, adata.obsm[corrected_representation] (from batch_correction.py)
+        - if origin_clade is passed, adata.obs["cnv_clades"] (from phylogenetic_tree.py)
 
     Outputs a gzip compressed h5ad with pseudotime annotated for each cell. 
     Output files are named {output_prefix}_{basename}.h5ad.
@@ -872,6 +876,7 @@ def infer_pseudotime(
     Parameters:
         input_data_file (str): path to aggregated / batch corrected h5ad file.
         corrected_representation (str, optional): name of corrected representation that was used to infer CNVs.
+            If this is passed, the root 
         save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/CNV. Defaults to False.
         input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "batch_corrected".
         output_prefix (str, optional): prefix for output file names. Defaults to "CNV_inferred".
@@ -894,7 +899,7 @@ def infer_pseudotime(
 
     # run script and assign path to temporary output file
     print(f"Inferring pseudotime from {input_data_file}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "pseudotime_inference.py"), input_data_file, output_temp_dir, [corrected_representation, verbose])
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "pseudotime_inference.py"), input_data_file, output_temp_dir, [corrected_representation, origin_clade, verbose])
 
     # rename output file
     os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}"))
@@ -1010,12 +1015,13 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), "CNV_inferred", ["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, output_prefix="reduced", verbose=True)
         
         
-        infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), save_output=True, input_prefix="batch_corrected", verbose=True, cell_type="ductal_cell", corrected_representation=None, output_prefix="test_CNV")
         selection_criteria = {
             "cell_type": ["ductal_cell"],
         }
-        cluster_and_plot(modules=["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR,"CNV", "test_CNV_PDAC_ductal_cell.h5ad"), obs_annotations=["cancer_state","cancer_state_inferred"], layers=["X"], save_output=True, selection_criteria=selection_criteria, projection="UMAP")
+        cluster_and_plot(modules=["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR,"CNV", "uncorrected_CNV_PDAC_ductal_cell.h5ad"), obs_annotations=["cancer_state","cancer_state_inferred"], layers=["X", "X_scANVI_corrected"], save_output=True, selection_criteria=selection_criteria, projection="UMAP", verbose=True)
         
+
+        # infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), origin_clade=1, input_prefix="transition_clades", verbose=True, save_output=True)
 
         purge_tempfiles()
         sys.exit(0)
