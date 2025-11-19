@@ -196,15 +196,23 @@ def plot_projection_and_DEGs(adata, layer):
         if entry not in internal_adata.obs.keys():
             colored_by.remove(entry)
             vprint(f"{entry} is not in adata.obs, removing it from colored_by list")
+
     
     # determine suitable number of columns for figure (rougly 1.5 times as many columns as rows)
     n_cols = np.round(np.sqrt(len(colored_by)*1.5)).astype(int) 
+
+    # make sure annotatins with categories are colored by category and not continuous values
+    for entry in colored_by:
+        if len(internal_adata.obs[entry].unique()) <= 20 or entry == "cnv_clade": # cnv clade yields continuous spectrum prbly bcs it has numpy floats
+            vprint(f"turning {entry} into categorical, unique values: {len(internal_adata.obs[entry].unique())}")
+            internal_adata.obs[entry] = pd.Categorical(internal_adata.obs[entry])
+
 
     # create a figure with one plot per color, save to temp, show if show is True
     if projection == "UMAP":
         vprint("computing UMAP embedding...")
         sc.tl.umap(internal_adata, 0.2) # uses neighbor graph # default value for mindist is actually 0.5 acoording to the docs, not 0.1 (0.2 yielded best seperation of cancer / non cancer)
-        sc.pl.umap(internal_adata, color=colored_by, show=False, ncols=n_cols)
+        sc.pl.umap(internal_adata, color=colored_by, show=False, ncols=n_cols, legend_loc="on data")
 
         # highlight root cell
         if root_cell_idx != None:
@@ -218,7 +226,7 @@ def plot_projection_and_DEGs(adata, layer):
             plt.show()
         plt.close()
     elif projection == "PCA":
-        sc.pl.pca(internal_adata, color=colored_by, show=False, ncols=n_cols)
+        sc.pl.pca(internal_adata, color=colored_by, show=False, ncols=n_cols, legend_loc="on data")
 
         # highlight root cell
         if root_cell_idx != None:
@@ -242,7 +250,7 @@ def plot_projection_and_DEGs(adata, layer):
             # turn obs annotations into categorical, if they have a reasonable number of categories
             remove_colored_by = []
             for entry in colored_by:
-                if len(internal_adata.obs[entry].unique()) <= 20:
+                if len(internal_adata.obs[entry].unique()) <= 50:
                     vprint(f"turning {entry} into categorical, unique values: {len(internal_adata.obs[entry].unique())}")
                     internal_adata.obs[entry] = pd.Categorical(internal_adata.obs[entry])
                 else:
@@ -755,6 +763,8 @@ def main():
 
     # read data into anndata
     print("reading data...")
+    print(input_data_file)
+    print(type(input_data_file))
     if type(input_data_file) == str and ".h5ad" in input_data_file:
         adata = sc.read_h5ad(input_data_file)
         if verbose:

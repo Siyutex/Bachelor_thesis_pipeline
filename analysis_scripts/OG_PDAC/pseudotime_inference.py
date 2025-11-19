@@ -10,7 +10,7 @@ from scipy.sparse import issparse
 
 def check_normalize(adata):
     # normalize if not already
-    if not hf.is_normalized(adata, layer=corrected_representation):
+    if not hf.is_normalized(adata):
         vprint("Normalizing adata...")
         sc.pp.normalize_total(adata, target_sum=1e4)
     else:
@@ -33,7 +33,7 @@ def prepare_for_pseudotime(adata):
     sc.tl.diffmap(adata, n_comps=15)
 
 
-def annotate_root_cell_mincnv(adata, corrected_representation):
+def annotate_root_cell_mincnv(adata):
     """
     Returns index of root cell. Root cell will be the cell with lowest cnv sum (based on gene_values_cnv)
     """
@@ -43,10 +43,10 @@ def annotate_root_cell_mincnv(adata, corrected_representation):
     adata = adata[adata.obs["cell_type"] == "ductal_cell", :].copy()
     adata = adata[adata.obs["cancer_state"] == "non_cancerous", :].copy()
 
-    if issparse(adata.obsm[f"{corrected_representation}_gene_values_cnv"]):
-        X = np.array(adata.obsm[f"{corrected_representation}_gene_values_cnv"])
-    elif type(adata.obsm[f"{corrected_representation}_gene_values_cnv"]) == np.ndarray:
-        X = adata.obsm[f"{corrected_representation}_gene_values_cnv"]
+    if issparse(adata.X):
+        X = np.array(adata.X)
+    elif type(adata.X) == np.ndarray:
+        X = adata.X
 
     # filter out NaN genes (inferCNV does not assign some genes a CNV value, if it skips over them with the sliding window)
     vprint("Filtering out NaN genes...")
@@ -87,7 +87,7 @@ def annotate_root_cell_clade(adata, origin_clade):
 
 
 
-def main(input_data_file, output_data_dir, corrected_representation, origin_clade):
+def main(input_data_file, output_data_dir, origin_clade):
 
     adata = sc.read_h5ad(input_data_file)
 
@@ -126,9 +126,9 @@ def main(input_data_file, output_data_dir, corrected_representation, origin_clad
 
 if __name__ == "__main__":
     # import cmd args
-    input_data_file, output_data_dir, corrected_representation, origin_clade, verbose = hf.import_cmd_args(4)
+    input_data_file, output_data_dir, origin_clade, verbose = hf.import_cmd_args(4)
     vprint = hf.make_vprint(verbose)
 
-    main(input_data_file, output_data_dir, corrected_representation, origin_clade)
+    main(input_data_file, output_data_dir, origin_clade)
 
     
