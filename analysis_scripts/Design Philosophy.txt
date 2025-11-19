@@ -18,7 +18,7 @@ General design:
 	- all termporary files are automatically deleted after the pipeline finishes
 	- outsource commonly used functions to JL_helper_functions library
 	- print used in subprocesses for major steps (progress updates), vprint for precise debugging info
-
+	- keep a requirements.txt in the repo, keep it updated, and ideally use a venv (eg miniconda3)
 
 Error Handling Philosophy for Thesis & Reusable Code
 
