@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 # native libs
 import json
-import sys
 import os
 import re
 from typing import Literal
@@ -17,7 +16,6 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 # phylogenetic tree
 from scipy.spatial.distance import pdist, squareform
-from skbio import DistanceMatrix
 from skbio.tree import nj
 from Bio import Phylo
 # other

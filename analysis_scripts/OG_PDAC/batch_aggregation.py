@@ -4,7 +4,6 @@ import os
 import scanpy as sc
 import re
 import helper_functions as hf
-from scipy import sparse
 import time, threading,psutil # for memory monitoring
 
 # memory monitoring

@@ -1,5 +1,4 @@
 import scanpy as sc
-import numpy as np
 import helper_functions as hf
 import os
 

@@ -21,7 +21,6 @@ import sys
 import helper_functions as hf
 import os
 from arboreto.algo import grnboost2
-from distributed import Client, LocalCluster
 import json
 
 # get cmd args
