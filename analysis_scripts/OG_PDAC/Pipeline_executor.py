@@ -787,7 +787,6 @@ def isolate_and_HVGs(
         input_data_file: str, 
         main_layer: str = None,
         max_considered_genes: int | Literal["all"] = 3000,
-        batch_threshold: float = 0.3,
         isolation_dict: dict[str, list[str]] = {},
         save_output: bool = False,
         input_prefix: str = "CNV_inferred",
@@ -813,9 +812,7 @@ def isolate_and_HVGs(
     Parameters:
         input_data_file (str): path to h5ad file.
         main_layer (str, optional): layer / obsm that will be moved to adata.X. Defaults to None, meaning adata.X will remain as is.
-        max_considered_genes (int, optional): maximum number of HVGs to consider. Defaults to 3000.
-            if this is set to "all", no HVGs will be selected.
-        batch_threshold (float, optional): relative amount of batches a gene must be an HVG in to be kept. Defaults to 0.3.
+        max_considered_genes (int, optional): maximum number of HVGs to consider. Defaults to 3000. If this is set to "all", no HVGs will be selected.
         isolation_dict (dict[str, list[str]], optional): dictionary of conditions to isolate, each key is a condition and each value is a list of the types to isolate. Defaults to {}
         save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/reduced. Defaults to False.
         input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "batch_corrected".
@@ -839,7 +836,7 @@ def isolate_and_HVGs(
 
     # run script and assign path to temporary output file
     print(f"Reducing {input_data_file}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "matrix_isolation_HVGs.py"), input_data_file, output_temp_dir, [main_layer, max_considered_genes, batch_threshold, isolation_dict, verbose])
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "matrix_isolation_HVGs.py"), input_data_file, output_temp_dir, [main_layer, max_considered_genes, isolation_dict, verbose])
 
     # rename output file
     os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}{"_HVG" if max_considered_genes != "all" else ""}{"_X_is_" + main_layer}.h5ad"))
@@ -1015,11 +1012,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # output = reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", save_output=True, input_prefix="CNV_inferred", verbose=True, layers_to_remove=["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv"], max_considered_genes="all")
         # reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), "CNV_inferred", ["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, output_prefix="reduced", verbose=True)
 
-        # cluster_and_plot(["projections"],os.path.join(OUTPUT_STORAGE_DIR, "isolated", "isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected.h5ad"), layers="X", obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"])
-        # infer_pseudotime(os.path.join(OUTPUT_STORAGE_DIR, "isolated", "isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected.h5ad"), origin_clade=26, save_output=True, input_prefix="isolated", verbose=True,)        
-        # cluster_and_plot(["projections"],os.path.join(OUTPUT_STORAGE_DIR, "pseudotime", "pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected.h5ad"), layers="X", obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "dpt_pseudotime"], projection="UMAP", root_cell_idx=2714, save_output=True, verbose=True, show=True)
-        cluster_and_plot(["projections"],os.path.join(OUTPUT_STORAGE_DIR, "pseudotime", "pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected.h5ad"), layers="X", obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "dpt_pseudotime"], projection="PCA", root_cell_idx=2714, save_output=True, verbose=True, show=True)
-
+        isolate_and_HVGs(os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", max_considered_genes=3000, isolation_dict={"cnv_clade": ["transitional"]}, save_output=True, input_prefix="transitiona_clades", verbose=True)
 
         purge_tempfiles()
         sys.exit(0)

@@ -4,32 +4,24 @@ import os
 import warnings
 
 
-def select_HVGs(adata, max_considered_genes, batch_threshold):
+def select_HVGs(adata, max_considered_genes):
     
-    # do batch aware HVG selection
+    # select HVGs, ignoring batch origin (since at this point, the data should be batch corrected)
     vprint("Selecting highly variable genes...")
     sc.pp.highly_variable_genes(
         adata,
         flavor="seurat_v3",
         n_top_genes=max_considered_genes,      # n_top_genes is the total number of HVGs across all batches
-        batch_key="batch"
     )
 
     n_highly_variable_genes = adata.var['highly_variable'].sum()
-    vprint(f"Found {n_highly_variable_genes} highly variable genes across {adata.obs['batch'].nunique()} batches.")
+    vprint(f"Found {n_highly_variable_genes} highly variable genes across {adata.n_obs} cells")
 
     adata_hvg = adata[:, adata.var['highly_variable']].copy() # only keep HVGs
 
     #number of genes that are left
     vprint(f"after applying the boolean mask, there are {adata_hvg.shape[1]} genes left")
     vprint(f"The shape of adata_hvg is {adata_hvg.shape}")
-
-
-    # only consider HVGs present in at least 30% of batches (and at very least 2 batches)
-    threshold = int(batch_threshold * adata.obs['batch'].nunique())
-    mask = adata_hvg.var.get('highly_variable_nbatches') >= threshold
-    adata_hvg = adata_hvg[:, mask].copy()
-    vprint(f"The shape of adata_hvg after thresholding is {adata_hvg.shape}")
 
     adata = adata_hvg.copy()
 
@@ -69,15 +61,15 @@ def main():
     print("isolating main layer...")
     adata = hf.matrix_to_anndata(adata, main_layer).copy()
 
+    # isolate cells (eg transtion state) (do before HVG to only take HVGs relevant to those cells)
+    adata = limit_cells(adata, isolation_dict)
+
     # select HVGs
     if max_considered_genes != "all":
         print("selecting HVGs...")
-        select_HVGs(adata, max_considered_genes, batch_threshold)
+        select_HVGs(adata, max_considered_genes)
     else:
         print("Skipping HVG selection...")
-
-    # isolate cells (eg transtion state)
-    adata = limit_cells(adata, isolation_dict)
 
     # save results
     print("Saving results...")
@@ -87,7 +79,7 @@ def main():
 
 if __name__ == "__main__":
 
-    input_data_file, output_data_dir, main_layer, max_considered_genes, batch_threshold, isolation_dict, verbose = hf.import_cmd_args(6)
+    input_data_file, output_data_dir, main_layer, max_considered_genes, isolation_dict, verbose = hf.import_cmd_args(6)
     vprint = hf.make_vprint(verbose)
 
     main()
