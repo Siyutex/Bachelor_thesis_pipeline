@@ -68,6 +68,7 @@ def main():
     if max_considered_genes != "all":
         print("selecting HVGs...")
         select_HVGs(adata, max_considered_genes)
+        vprint(f"The shape of adata after hvg selection is {adata.shape}")
     else:
         print("Skipping HVG selection...")
 

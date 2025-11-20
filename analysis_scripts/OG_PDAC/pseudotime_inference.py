@@ -6,6 +6,7 @@ import helper_functions as hf
 import os
 import numpy as np
 from scipy.sparse import issparse
+import py_monocle as monocle
 
 
 def check_normalize(adata):
@@ -15,22 +16,6 @@ def check_normalize(adata):
         sc.pp.normalize_total(adata, target_sum=1e4)
     else:
         vprint("adata is already normalized, skipping normalization...")
-
-
-def prepare_for_pseudotime(adata):
-
-    # compute PCA embedding (needed for neihbor graph), adds adata.obsm["X_pca"]
-    vprint("Computing PCA embedding...")
-    sc.pp.pca(adata, n_comps=50, svd_solver="arpack")
-
-    # compute neighbors, provides neighborhood graph which is used by diffmap
-    vprint("Computing neighbors...")
-    sc.pp.neighbors(adata, n_neighbors=15, n_pcs=50, use_rep="X_pca") # uses same n_neighbous as in UMAP plots so represenation is accurate
-
-    # compute diffmap (automatically uses default fields created by neighbors)
-    # random walks from each cell to all other cells to get distances
-    vprint("Computing diffmap...")
-    sc.tl.diffmap(adata, n_comps=15)
 
 
 def annotate_root_cell_mincnv(adata):
@@ -67,7 +52,7 @@ def annotate_root_cell_mincnv(adata):
     return best_cell_idx
 
 
-def annotate_root_cell_clade(adata, origin_clade):
+def get_root_cell_clade(adata, origin_clade):
     """
     return root cell index. Root cell is a random cell from the given clade
     """
@@ -86,6 +71,37 @@ def annotate_root_cell_clade(adata, origin_clade):
     return root_cell_idx
 
 
+def compute_pseudotime_dpt(adata, n_pcs: int = 50, n_neighbors: int = 15):
+
+    # compute PCA embedding (needed for neihbor graph), adds adata.obsm["X_pca"]
+    vprint("Computing PCA embedding...")
+    sc.pp.pca(adata, n_comps=n_pcs, svd_solver="arpack")
+
+    # compute neighbors, provides neighborhood graph which is used by diffmap
+    vprint("Computing neighbors...")
+    sc.pp.neighbors(adata, n_neighbors=n_neighbors, n_pcs=n_pcs, use_rep="X_pca") # uses same n_neighbous as in UMAP plots so represenation is accurate
+
+    # compute diffmap (automatically uses default fields created by neighbors)
+    # random walks from each cell to all other cells to get distances
+    vprint("Computing diffmap...")
+    sc.tl.diffmap(adata, n_comps=n_neighbors)
+
+    # compute pseudotime (uses diffusion distances to get pseudotime, and automatically uses default fields created by neighbors)
+    # adds annotations to adata.obs["dpt_pseudotime"]
+    print("Computing pseudotime...")
+    sc.tl.dpt(adata, n_dcs=n_neighbors)
+
+
+def compute_pseudotime_monocle(adata, root_cell_idx):
+    monocle.compute_cell_states()
+    monocle.differential_expression_genes()
+    monocle.learn_graph()
+    monocle.pseudotime()
+    monocle.regression_analysis()
+
+    return
+
+
 
 def main(input_data_file, output_data_dir, origin_clade):
 
@@ -98,26 +114,18 @@ def main(input_data_file, output_data_dir, origin_clade):
     print("Checking normalization...")
     check_normalize(internal_adata)
 
-    # prepare (pca, neighbors, diffmap) for pseudotime inference
-    print("Adding necessary fields for pseudotime inference...")
-    prepare_for_pseudotime(internal_adata)
-
     # annotate root cell
     print("Annotating root cell...")
-    root_idx = annotate_root_cell_clade(internal_adata, origin_clade)
+    root_idx = get_root_cell_clade(internal_adata, origin_clade)
     adata.uns["iroot"] = root_idx
     internal_adata.uns["iroot"] = root_idx
 
-    # compute pseudotime (uses diffusion distances to get pseudotime, and automatically uses default fields created by neighbors)
-    # adds annotations to adata.obs["dpt_pseudotime"]
-    print("Computing pseudotime...")
-    sc.tl.dpt(internal_adata, n_dcs=15)
+    # prepare (pca, neighbors, diffmap) for pseudotime inference
+    print("Adding necessary fields for pseudotime inference...")
+    compute_pseudotime_dpt(internal_adata)
 
     # add pseudotime to actual adata
-    adata.obs["dpt_pseudotime"] = internal_adata.obs["dpt_pseudotime"]
-
-    # PLOTTING
-    # sc.pl.scatter(adata, x="dpt_pseudotime", y="summed_cnvs", title="CNV vs pseudotime")
+    adata.obs["pseudotime"] = internal_adata.obs["dpt_pseudotime"]
 
     # save results
     print("Saving results...")
