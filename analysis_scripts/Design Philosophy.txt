@@ -20,7 +20,8 @@ General design:
 	- outsource commonly used functions to JL_helper_functions library
 	- print used in subprocesses for major steps (progress updates), vprint for precise debugging info
 	- keep a requirements.txt in the repo, keep it updated, and ideally use a venv (eg miniconda3)
-
+	- NEVER TRUST LIBRARY DEFAULT PARAMETERS, always read the docs and understand what parameters docs
+	  (e.g. default library size = 1 in scvitools get_normalized_expression is very very bad for downstream analysis)
 
 For future projects:
 - at the very beginning, run a script to standardize raw data format

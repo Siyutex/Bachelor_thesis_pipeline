@@ -1,0 +1,2 @@
+- here we improved cell type annotation and batch correction, then implemented phylogenetic tree + plot for transition clade classification
+- the run was stopped before pseudotime because we realized that library size = 1 (default param from scanvi.get_normalized_expression) breaks downstream assumptions (log1p becomes meaningless, cannot use absolute thresholds (eg < 1) to classify low / no expression)

@@ -1,0 +1,2 @@
+here we developed the intial pipeline scipts.
+The reason the run was stopped is because of batch artifacts in cnv clusters --> batch correction and annotation had to be redone

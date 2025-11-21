@@ -1012,9 +1012,10 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # output = reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", save_output=True, input_prefix="CNV_inferred", verbose=True, layers_to_remove=["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv"], max_considered_genes="all")
         # reduce_data(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_PDAC_ductal_cell.h5ad"), "CNV_inferred", ["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, output_prefix="reduced", verbose=True)
 
-        isolate_and_HVGs(os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", save_output=True, max_considered_genes=3000, input_prefix="", output_prefix="isolated", verbose=True) 
-        #for projection in ["PCA"]:
-        #    cluster_and_plot(["projections"], os.path.join(OUTPUT_STORAGE_DIR, "isolated", "isolated_transition_clades_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected.h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], projection=projection, selection_criteria={"cancer_state_inferred_tree":["transitional"]}, verbose=True, save_output=False, show=True)
+        # isolate_and_HVGs(os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", save_output=True, max_considered_genes=3000, input_prefix="", output_prefix="isolated", verbose=True) 
+        for projection in ["UMAP"]:
+            for dict in [{}]:
+                cluster_and_plot(["projections"], os.path.join(OUTPUT_STORAGE_DIR, "isolated", "isolated_transition_clades_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected.h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["X", "log1p"], projection=projection, selection_criteria={"cancer_state_inferred_tree":["transitional"]}, verbose=True, save_output=True, show=False)
 
         purge_tempfiles()
         sys.exit(0)
