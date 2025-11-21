@@ -13,24 +13,6 @@ import helper_functions as hf
 import anndata
 from typing import Tuple
 
-def check_lognormalize(adata):
-    """
-    checks normalization of X, saves to new layer, normalizes that layer if necessary, log1p on new layer
-    new layer: "X_log_normalized"
-    """
-
-    # copy X to new layer
-    adata.layers["X_log_normalized"] = adata.X.copy()
-
-    if not hf.is_normalized(adata, layer="X_log_normalized"):
-        vprint("Adata is not normalized, normalizing adata...")
-        sc.pp.normalize_total(adata, target_sum=1e4, layer="X_log_normalized")
-    else:
-        vprint("adata is already normalized")
-    
-    vprint("Logarithmizing data...")
-    sc.pp.log1p(adata, layer="X_log_normalized")
-
 
 def correct_batches_scVI(adata, max_considered_genes) -> Tuple[anndata.AnnData, scvi.model.SCVI]:
     """
@@ -113,7 +95,7 @@ def correct_batches_scVI(adata, max_considered_genes) -> Tuple[anndata.AnnData, 
     # Get the batch-corrected latent representation (obsm is a matrix like X where each row is a cell and each column is a feature)
     # get batch keys
     batch_keys = internal_adata.obs["batch"].unique()
-    internal_adata.obsm["X_scVI_corrected"] = model.get_normalized_expression(transform_batch=batch_keys[0])
+    internal_adata.obsm["X_scVI_corrected"] = model.get_normalized_expression(transform_batch=batch_keys[0], library_size=10000) # tranform batch is the batch that all batches should be corrected to, library_size is counts per cell to normalize to (this is 1 by default, which will lead to donwstream issues (eg log1p not working))
     print(f"Shape of corrected expression matrix{internal_adata.obsm["X_scVI_corrected"].shape}")
 
     return internal_adata, model
@@ -163,7 +145,7 @@ def correct_batches_scANVI(adata_scvi, pretrained_scVI_model) -> Tuple[anndata.A
     # Get the batch-corrected latent representation (obsm is a matrix like X where each row is a cell and each column is a feature)
     # get batch keys
     batch_keys = internal_adata.obs["batch"].unique()
-    internal_adata.obsm["X_scANVI_corrected"] = model.get_normalized_expression(transform_batch=batch_keys[0])
+    internal_adata.obsm["X_scANVI_corrected"] = model.get_normalized_expression(transform_batch=batch_keys[0], library_size=10000)
 
     return internal_adata, model
 
@@ -173,7 +155,7 @@ def main(input_data_file, output_dir, max_considered_genes):
 
     # run the models, feed in raw (filtered) counts
     adata_scvi, scvi_model = correct_batches_scVI(adata, max_considered_genes=max_considered_genes) # does hvg selection if necessary, copies layer to X
-    corrected_adata, scanvi_model = correct_batches_scANVI(adata_scvi, scvi_model) # since first function alrdy checked lognorm and did hvg if wanted, no need to do it again
+    corrected_adata, scanvi_model = correct_batches_scANVI(adata_scvi, scvi_model) # since first function alrdy did hvg if wanted, no need to do it again
 
     # carry over the corrected latent representations (later get full gene expression and put into layers)
     adata.obsm["X_scVI_corrected"] = corrected_adata.obsm["X_scVI_corrected"]

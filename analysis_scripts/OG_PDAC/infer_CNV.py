@@ -72,7 +72,7 @@ def assign_chromosomal_coordinats(adata, reference_genome_path):
     adata.var["start"] = coords_matched["start"].values
     adata.var["end"] = coords_matched["end"].values
 
-def add_additional_annotations(adata, cancerous_threshold):
+def add_additional_annotations(adata):
 
     # add CNVs per cell to obs
     vprint("Adding CNVs per cell to adata.obs...")
@@ -131,7 +131,7 @@ def main(input_data_file, output_data_dir, refernce_genome_path, corrected_repre
 
     # add additional annotations
     print("Adding additional annotations...")
-    add_additional_annotations(internal_adata, cancerous_threshold)
+    add_additional_annotations(internal_adata)
 
     # assign new annotations to original adata
     if corrected_representation is not None:
@@ -157,10 +157,10 @@ def main(input_data_file, output_data_dir, refernce_genome_path, corrected_repre
 
 if __name__ == "__main__":
     # import cmd args
-    input_data_file, output_data_dir, refernce_genome_path, corrected_representation, cell_type, cancerous_threshold, verbose = hf.import_cmd_args(6)
+    input_data_file, output_data_dir, refernce_genome_path, corrected_representation, cell_type, verbose = hf.import_cmd_args(6)
     vprint = hf.make_vprint(verbose)
 
-    main(input_data_file, output_data_dir, refernce_genome_path, corrected_representation, cell_type, cancerous_threshold)
+    main(input_data_file, output_data_dir, refernce_genome_path, corrected_representation, cell_type)
 
 
 
