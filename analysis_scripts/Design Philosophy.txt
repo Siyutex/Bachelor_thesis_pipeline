@@ -1,7 +1,8 @@
 General design: 
 	- name all folder with "_" and standard english letters to avoid messed up pathing
 	- Relative filepaths and use raw string to avoid escape chars (r"...")
-	- use functions
+	- use functions, and never modify function parameters in place, always via return values
+	- type checkiing for input and output of functions
 	- explain everything with comments and standardized docstrings
 	- wrap EVERY SCRIPT in if __name__ == "__main__" (to avoid fork bombs with subprocesses)
 	- try to avoid hardcoded strings as arguments (use variables / constants so it still matches if changed)
@@ -19,16 +20,6 @@ General design:
 	- outsource commonly used functions to JL_helper_functions library
 	- print used in subprocesses for major steps (progress updates), vprint for precise debugging info
 	- keep a requirements.txt in the repo, keep it updated, and ideally use a venv (eg miniconda3)
-
-Error Handling Philosophy for Thesis & Reusable Code
-
-    ✅ Add minimal, practical error checks (e.g., missing files, wrong paths)
-
-    ✅ Provide clear, readable error messages for common user mistakes
-
-    ✅ Prioritize code I can reliably re-run months later without debugging (this is why comments and error handling are important)
-
-    ✅ Keep GitHub repos clean and understandable to show competence, but avoid over-engineering
 
 
 For future projects:

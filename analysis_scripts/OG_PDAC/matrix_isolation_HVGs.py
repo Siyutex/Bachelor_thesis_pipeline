@@ -4,7 +4,7 @@ import os
 import warnings
 
 
-def select_HVGs(adata, max_considered_genes):
+def select_HVGs(adata, max_considered_genes) -> sc.AnnData:
     
     # select HVGs, ignoring batch origin (since at this point, the data should be batch corrected)
     vprint("Selecting highly variable genes...")
@@ -23,7 +23,7 @@ def select_HVGs(adata, max_considered_genes):
     vprint(f"after applying the boolean mask, there are {adata_hvg.shape[1]} genes left")
     vprint(f"The shape of adata_hvg is {adata_hvg.shape}")
 
-    adata = adata_hvg.copy()
+    return adata_hvg
 
 
 def limit_cells(adata, isolation_dict) -> sc.AnnData:
@@ -67,8 +67,7 @@ def main():
     # select HVGs
     if max_considered_genes != "all":
         print("selecting HVGs...")
-        select_HVGs(adata, max_considered_genes)
-        vprint(f"The shape of adata after hvg selection is {adata.shape}")
+        adata = select_HVGs(adata, max_considered_genes)
     else:
         print("Skipping HVG selection...")
 
