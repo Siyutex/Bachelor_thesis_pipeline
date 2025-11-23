@@ -1021,7 +1021,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
                 library_sizes = adata.X.sum(axis=1)
             print(f"Library sizes for layer {layer}: {library_sizes}")
 
-            if not np.allclose(library_sizes, library_sizes[0]):
+            b = np.full((library_sizes.shape[0], 1), 10000) # all library sizes should be 10000
+            if not np.allclose(library_sizes, b, atol=10): # don't care if counts vary by 10 for whatever reason
                 raise Exception(f"Library sizes are not uniform in layer {layer}")
             
         def print_adata_info(input_data_file: str):
@@ -1033,12 +1034,12 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             for layer in adata.obsm.keys():
                 print(f"Obsm {layer} summary: \n{adata.obsm[layer]}")
             
-        output_path_list = correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_PDAC.h5ad"), save_output=True, verbose=True, max_considered_genes="all")
+        r"""output_path_list = correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_PDAC.h5ad"), save_output=True, verbose=True, max_considered_genes="all")
         for output in output_path_list:
             check_library_size(output, "X_scANVI_corrected")
-            print_adata_info(output)
+            print_adata_info(output)"""
         
-        output_path_list = infer_CNVs(output_path_list[0], os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), corrected_representation="X_scANVI_corrected", cell_type="ductal_cell", save_output=True, verbose=True)
+        output_path_list = infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), corrected_representation="X_scANVI_corrected", cell_type="ductal_cell", save_output=True, verbose=True)
         for output in output_path_list:
             check_library_size(output, "X_scANVI_corrected")
             print_adata_info(output)
