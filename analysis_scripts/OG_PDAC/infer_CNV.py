@@ -139,11 +139,13 @@ def main(input_data_file, output_data_dir, refernce_genome_path, corrected_repre
         adata.obsm[f"{corrected_representation}_gene_values_cnv"] = internal_adata.layers["gene_values_cnv"]
         adata.obs["summed_cnvs"] = internal_adata.obs["summed_cnvs"]
         adata.obs["cnv_score"] = internal_adata.obs["cnv_score"]
+        adata.obs["cancer_state_inferred"] = internal_adata.obs["cancer_state_inferred"]
     else:
         adata.obsm["X_cnv"] = internal_adata.obsm["X_cnv"]
         adata.obsm["X_gene_values_cnv"] = internal_adata.layers["gene_values_cnv"] # still add to obsm so downstream processing is uniform
         adata.obs["summed_cnvs"] = internal_adata.obs["summed_cnvs"]
         adata.obs["cnv_score"] = internal_adata.obs["cnv_score"]
+        adata.obs["cancer_state_inferred"] = internal_adata.obs["cancer_state_inferred"]
 
     # save results
     print("Saving results...")
