@@ -90,7 +90,7 @@ def add_additional_annotations(adata):
     percentile = (len(adata[adata.obs["cancer_state"] == "non_cancerous"]) / adata.shape[0]) * 100 #percentile is a float between 0 and 100
     adata.obs["cancer_state_inferred"] = np.where(adata.obs["cnv_score"] > np.percentile(adata.obs["cnv_score"], percentile), "cancerous", "non_cancerous")
 
-def main(input_data_file, output_data_dir, refernce_genome_path, corrected_representation, cell_type, cancerous_threshold):
+def main(input_data_file, output_data_dir, refernce_genome_path, corrected_representation, cell_type):
 
     # import adata
     print("Reading data...")
