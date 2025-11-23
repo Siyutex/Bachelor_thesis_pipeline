@@ -1028,7 +1028,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         def print_adata_info(input_data_file: str):
             adata = sc.read_h5ad(input_data_file)
             print(f"Adata summary: \n{adata}")
-            print(f"Head of adata: \n{adata.X[:5]}")
+            if adata.X != None:
+                print(f"Head of adata.X: \n{adata.X[:5]}")
             for layer in adata.layers.keys():
                 print(f"Layer {layer} summary: \n{adata.layers[layer]}")
             for layer in adata.obsm.keys():
@@ -1039,17 +1040,17 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             check_library_size(output, "X_scANVI_corrected")
             print_adata_info(output)"""
         
-        output_path_list = infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), corrected_representation="X_scANVI_corrected", cell_type="ductal_cell", save_output=True, verbose=True)
+        r"""output_path_list = infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), corrected_representation="X_scANVI_corrected", cell_type="ductal_cell", save_output=True, verbose=True)
         for output in output_path_list:
             check_library_size(output, "X_scANVI_corrected")
-            print_adata_info(output)
+            print_adata_info(output)"""
 
-        output_path_list = reduce_data(output_path_list[0], input_prefix="CNV_inferred", layers_to_remove=["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, verbose=True)
+        r"""output_path_list = reduce_data(output_path_list[0], input_prefix="CNV_inferred", layers_to_remove=["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, verbose=True)
         for output in output_path_list:
             check_library_size(output, "X_scANVI_corrected")
-            print_adata_info(output)
+            print_adata_info(output)"""
 
-        output_path_list = get_phylogenetic_tree(output_path_list[0], "X_scANVI_corrected_cnv", distance_metric="euclidean", grouping_metric="cancer_state_inferred", transition_entropy_threshold=0.8, save_output=True, verbose=True)
+        output_path_list = get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), "X_scANVI_corrected_cnv", distance_metric="euclidean", grouping_metric="cancer_state_inferred", transition_entropy_threshold=0.8, save_output=True, verbose=True)
         for output in output_path_list:
             check_library_size(output, "X_scANVI_corrected")
             print_adata_info(output)
