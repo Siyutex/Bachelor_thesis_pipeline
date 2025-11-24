@@ -4,6 +4,13 @@ import os
 import warnings
 
 
+def add_log1p_layer(adata):
+    adata_log = sc.pp.log1p(adata, copy=True)
+    new_adata = adata.copy()
+    new_adata.layers["log1p"] = adata_log.X
+    return new_adata
+
+
 def select_HVGs(adata, max_considered_genes) -> sc.AnnData:
     
     # select HVGs, ignoring batch origin (since at this point, the data should be batch corrected)
@@ -61,8 +68,13 @@ def main():
     print("isolating main layer...")
     adata = hf.matrix_to_anndata(adata, main_layer).copy()
 
+    if add_log1p:
+        print("Adding log1p layer...")
+        adata = add_log1p_layer(adata).copy()
+
+
     # isolate cells (eg transtion state) (do before HVG to only take HVGs relevant to those cells)
-    adata = limit_cells(adata, isolation_dict)
+    adata = limit_cells(adata, isolation_dict).copy()
 
     # select HVGs
     if max_considered_genes != "all":
@@ -79,7 +91,7 @@ def main():
 
 if __name__ == "__main__":
 
-    input_data_file, output_data_dir, main_layer, max_considered_genes, isolation_dict, verbose = hf.import_cmd_args(6)
+    input_data_file, output_data_dir, main_layer, add_log1p, max_considered_genes, isolation_dict, verbose = hf.import_cmd_args(6)
     vprint = hf.make_vprint(verbose)
 
     main()

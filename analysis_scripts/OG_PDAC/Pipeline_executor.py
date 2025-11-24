@@ -218,6 +218,7 @@ def cluster_and_plot(
         # auxiliary arguments
         show: bool = True,
         save_output: bool = False,
+        output_storage_subdir = "",
         verbose: bool = False) -> None:
     
     """
@@ -267,6 +268,7 @@ def cluster_and_plot(
 
         show (bool, optional): whether to show the plots. Defaults to True.
         save_output (bool, optional): whether to save the plots permanently. Defaults to False.
+        output_storage_subdir (str, optional): subdirectory of "plots" to store this run's plots in.
         verbose (bool, optional): whether to print verbose output. Defaults to False.
 
     Returns:
@@ -288,8 +290,11 @@ def cluster_and_plot(
     os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "plots"), exist_ok=True)
     os.makedirs(os.path.join(TEMP_DIR, "plots"), exist_ok=True)
 
+    if output_storage_subdir is not "":
+        os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "plots", output_storage_subdir), exist_ok=True)
+
     # assign directories for temporary and permanent storage
-    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "plots")
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "plots", output_storage_subdir)
     output_temp_dir = os.path.join(TEMP_DIR, "plots")
 
     # run script and assign path to temporary output file
@@ -784,6 +789,7 @@ def get_phylogenetic_tree(
 def isolate_and_HVGs(
         input_data_file: str, 
         main_layer: str = None,
+        add_log1p: bool = False,
         max_considered_genes: int | Literal["all"] = 3000,
         isolation_dict: dict[str, list[str]] = {},
         save_output: bool = False,
@@ -805,11 +811,13 @@ def isolate_and_HVGs(
     Output files are named {output_prefix}_{basename}{suffix}.h5ad.
     where suffix may contain "_HVG" if HVGs are selected, "_X_is_{main_layer}" if main layer is given and "_{isolation_dict.key}_is_{isolation_dict[key]}" for each key in isolation_dict
 
-    Adds no annotations to adata.
+    Annotations added to adata.layers:
+        - if add_log1p == True: adata.layers["log1p"] = log1p(main_layer)
 
     Parameters:
         input_data_file (str): path to h5ad file.
         main_layer (str, optional): layer / obsm that will be moved to adata.X. Defaults to None, meaning adata.X will remain as is.
+        add_log1p (bool, optional): whether to add a new layer with log1p(main_layer). Defaults to False.
         max_considered_genes (int, optional): maximum number of HVGs to consider. Defaults to 3000. If this is set to "all", no HVGs will be selected.
         isolation_dict (dict[str, list[str]], optional): dictionary of conditions to isolate, each key is a condition and each value is a list of the types to isolate. Defaults to {}
         save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/reduced. Defaults to False.
@@ -834,7 +842,7 @@ def isolate_and_HVGs(
 
     # run script and assign path to temporary output file
     print(f"Reducing {input_data_file}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "matrix_isolation_HVGs.py"), input_data_file, output_temp_dir, [main_layer, max_considered_genes, isolation_dict, verbose])
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "matrix_isolation_HVGs.py"), input_data_file, output_temp_dir, [main_layer, add_log1p, max_considered_genes, isolation_dict, verbose])
 
     # rename output file
     HVG_suffix = "_HVG" if max_considered_genes != "all" else ""
@@ -1040,7 +1048,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             check_library_size(output, "X_scANVI_corrected")
             print_adata_info(output)"""
         
-        output_path_list = infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), corrected_representation="X_scANVI_corrected", cell_type="ductal_cell", save_output=True, verbose=True)
+        r"""output_path_list = infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), corrected_representation="X_scANVI_corrected", cell_type="ductal_cell", save_output=True, verbose=True)
         for output in output_path_list:
             check_library_size(output, "X_scANVI_corrected")
             print_adata_info(output)
@@ -1053,24 +1061,30 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         output_path_list = get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), "X_scANVI_corrected_cnv", distance_metric="euclidean", grouping_metric="cancer_state_inferred", transition_entropy_threshold=0.8, save_output=True, verbose=True)
         for output in output_path_list:
             check_library_size(output, "X_scANVI_corrected")
-            print_adata_info(output)
+            print_adata_info(output)"""
 
-        output_path_list = isolate_and_HVGs(output_path_list[0], main_layer="X_scANVI_corrected", max_considered_genes=3000, isolation_dict={}, save_output=True, input_prefix="transition_clades", verbose=True)
-        for output in output_path_list:
-            check_library_size(output, "X")
-            print_adata_info(output)
+        r"""# plots to validate batch correction
+        for projection in ["PCA"]: # add "UMAP"
+            cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), selection_criteria={}, obs_annotations=["batch", "cell_type", "cancer_state"], layers=["X_scANVI_corrected", "X"], projection=projection, show=False, save_output=True, output_storage_subdir=os.path.join(OUTPUT_STORAGE_DIR, "plots", "batch_correction_assessment"))
+        """
+        # plots of cnv clusters
+        for projection in ["PCA"]: # add "UMAP"
+            cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), selection_criteria={}, obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_clade", "cnv_score"], layers=["X_scANVI_corrected_cnv"], projection=projection, show=True, save_output=False, output_storage_subdir=os.path.join(OUTPUT_STORAGE_DIR, "plots", "cnv_clusters"))
+        
+        # tree plot
+        cluster_and_plot(["phylogenetic_tree"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree"], show=False, save_output=True, tree_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "cnv_tree_reduced_PDAC_ductal_cell.nwk"))
 
-        output_path_list = isolate_and_HVGs(output_path_list[0], main_layer=None, max_considered_genes="all", isolation_dict={"cancer_state_inferred_tree":"transitional"}, save_output=True, input_prefix="isolated", verbose=True)
-        for output in output_path_list:
-            check_library_size(output, "X")
-            print_adata_info(output)
+        sys.exit(0)
+
+        # create isolated h5ad with X_scANVI_corrected as main layer, log1p layer added, then 3000HVGs selected
+        isolate_and_HVGs(os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes="all", isolation_dict={}, save_output=True, input_prefix="transition_clades")
+
+        # normalized vs log normalized + start clade choosing for pseudotime
+        for projection in ["UMAP", "PCA"]:
+            cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "isolated", "isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected.h5ad"), selection_criteria={}, obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_clade", "cnv_score"], layers=["X", "log1p"], projection=projection, show=False, save_output=True, output_storage_subdir=os.path.join(OUTPUT_STORAGE_DIR, "plots", "log1p_vs_normalized", "all_cancer_states"))
+            cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "isolated", "isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected.h5ad"), selection_criteria={"cancer_state_inferred_tree":"transitional"}, obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_clade", "cnv_score"], layers=["X", "log1p"], projection=projection, show=False, save_output=True, output_storage_subdir=os.path.join(OUTPUT_STORAGE_DIR, "plots", "log1p_vs_normalized", "just_transitional"))
 
 
-
-        # isolate_and_HVGs(os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", save_output=True, max_considered_genes=3000, input_prefix="", output_prefix="isolated", verbose=True) 
-        # for projection in ["UMAP"]:
-        #    for dict in [{}]:
-        #        cluster_and_plot(["projections"], os.path.join(OUTPUT_STORAGE_DIR, "isolated", "isolated_transition_clades_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected.h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["X", "log1p"], projection=projection, selection_criteria={"cancer_state_inferred_tree":["transitional"]}, verbose=True, save_output=True, show=False)
 
         purge_tempfiles()
         sys.exit(0)

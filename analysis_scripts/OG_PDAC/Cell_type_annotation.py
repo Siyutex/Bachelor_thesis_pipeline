@@ -111,6 +111,7 @@ def annotate_markers_cellassign(adata, use_ensembl_ids):
         internal_adata.var_names = internal_adata.var["gene_symbols"]
 
     # compute size factor (ratio of a cell's UMI counts to average cell's counts)
+    # in the docs it says the alternative is the size factor is "computed empirically from the counts per cell", which indicates that one should not normalize counts before using cellassign
     lib_size = adata.X.sum(1)
     internal_adata.obs["size_factor"] = lib_size / np.mean(lib_size)
 

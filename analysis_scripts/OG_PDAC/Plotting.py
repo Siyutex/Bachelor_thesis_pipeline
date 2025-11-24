@@ -175,15 +175,16 @@ def plot_projection_and_DEGs(adata, layer):
     vprint("computing PCA embeddings...")
     sc.pp.pca(internal_adata, svd_solver="arpack")
 
-    vprint("finding neighbors...")
-    sc.pp.neighbors(internal_adata, use_rep="X_pca", n_neighbors=25, metric="euclidean") # these are the default params
+    if projection == "UMAP":
+        vprint("finding neighbors...")
+        sc.pp.neighbors(internal_adata, use_rep="X_pca", n_neighbors=25, metric="euclidean") # these are the default params
 
-    vprint("computing leiden clusters...")
-    sc.tl.leiden(internal_adata, resolution=0.1) # uses neighbor graph
+        if "leiden" in obs_annotations:
+            vprint("computing leiden clusters...")
+            sc.tl.leiden(internal_adata, resolution=0.1) # uses neighbor graph
     
     # internal list since lists are mutable and we do not want to change the global list
     colored_by = obs_annotations.copy() # smth like ["cell_type", "summed_cnv", "pseudotime", "cnv_score", ...]
-    colored_by.append("leiden")
     
     # quality checks before plotting
     vprint("quality checks before plotting...")
