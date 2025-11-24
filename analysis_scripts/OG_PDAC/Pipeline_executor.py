@@ -793,13 +793,13 @@ def isolate_and_HVGs(
         max_considered_genes: int | Literal["all"] = 3000,
         isolation_dict: dict[str, list[str]] = {},
         save_output: bool = False,
-        input_prefix: str = "CNV_inferred",
+        input_prefix: str = "transition_clades",
         output_prefix: str = "isolated",
         verbose: bool = False) -> list[str]:
     """ 
-    Only keep the main layer in adata.X and optionally select HVGs for it. Purge everything else.
-    Optionally limit cells to conditions in isolation_dict.
-    (all other adata.layers and adata.obsm entries are removed, only main_layer, adata.obs, and adata.var are kept)
+    Move main layer to adata.X, purge everything else. Then add optionally add log1p layer of main layer.
+    Optionally compute HVGs (are computed on log1p layer, if log1p layer is added). Optionally isolate cells
+    according to isolation_dict.
 
     Input should be an h5ad file.
 
@@ -847,7 +847,7 @@ def isolate_and_HVGs(
     # rename output file
     HVG_suffix = "_HVG" if max_considered_genes != "all" else ""
     X_is_suffix = f"_X_is_{main_layer}" if main_layer is not None else ""
-    isolation_suffix = ("_" + "_".join(f"{key}_is_{value}" for key, value in isolation_dict.items())) if isolation_dict is not {} else ""
+    isolation_suffix = ("_" + "_".join(f"{key}_is_{value}" for key, value in isolation_dict.items())) if isolation_dict != {} else ""
     os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}{HVG_suffix}{X_is_suffix}{isolation_suffix}.h5ad"))
     temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}{HVG_suffix}{X_is_suffix}{isolation_suffix}.h5ad")
 
@@ -864,12 +864,13 @@ def isolate_and_HVGs(
 def infer_pseudotime(
         input_data_file: str, 
         origin_clade: int,
+        flavor: Literal["monocle", "dpt"] = "monocle",
         save_output: bool = False,
         input_prefix: str = "CNV_inferred",
         output_prefix: str = "pseudotime_inferred",
         verbose: bool = False) -> list[str]:
     """ 
-    Infer pseudotimefrom a CNV inferred h5ad file.
+    Infer pseudotime from an h5ad file.
 
     Input should be a an h5ad file. Ideally with transition clades isolated.
 
@@ -879,11 +880,14 @@ def infer_pseudotime(
     Outputs a gzip compressed h5ad with pseudotime annotated for each cell. 
     Output files are named {output_prefix}_{basename}.h5ad.
 
-    Annotations added to adata.obs: adata.obs['pseudotime']: pandas.Series (dtype float) (pseudotime value for each cell)
-
+    Annotations added to adata.obs: 
+        - if flavor == "dpt", adata.obs['pseudotime']: pandas.Series (dtype float) (pseudotime value for each cell)
+        - if flavor == "monocle", adata.obs['monocle_pseudotime']: pandas.Series (dtype float) (pseudotime value for each cell)
+        
     Parameters:
         input_data_file (str): path to aggregated / batch corrected h5ad file.
         origin_clade (int, optional): root clade for pseudotime inference (this should be the most normal clade, lowest cnv / whatver fitting metric you use).
+        flavor (Literal["monocle", "dpt"], optional): pseudotime inference method. Defaults to "monocle".
         save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/CNV. Defaults to False.
         input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "batch_corrected".
         output_prefix (str, optional): prefix for output file names. Defaults to "CNV_inferred".
@@ -906,7 +910,7 @@ def infer_pseudotime(
 
     # run script and assign path to temporary output file
     print(f"Inferring pseudotime from {input_data_file}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "pseudotime_inference.py"), input_data_file, output_temp_dir, [ origin_clade, verbose])
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "pseudotime_inference.py"), input_data_file, output_temp_dir, [origin_clade, flavor, verbose])
 
     # rename output file
     os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}"))
@@ -1067,22 +1071,22 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         for projection in ["PCA"]: # add "UMAP"
             cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), selection_criteria={}, obs_annotations=["batch", "cell_type", "cancer_state"], layers=["X_scANVI_corrected", "X"], projection=projection, show=False, save_output=True, output_storage_subdir=os.path.join(OUTPUT_STORAGE_DIR, "plots", "batch_correction_assessment"))
         """
-        # plots of cnv clusters
+        r"""# plots of cnv clusters
         for projection in ["PCA"]: # add "UMAP"
             cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), selection_criteria={}, obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_clade", "cnv_score"], layers=["X_scANVI_corrected_cnv"], projection=projection, show=True, save_output=False, output_storage_subdir=os.path.join(OUTPUT_STORAGE_DIR, "plots", "cnv_clusters"))
         
         # tree plot
         cluster_and_plot(["phylogenetic_tree"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree"], show=False, save_output=True, tree_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "cnv_tree_reduced_PDAC_ductal_cell.nwk"))
+        """
 
-        sys.exit(0)
 
-        # create isolated h5ad with X_scANVI_corrected as main layer, log1p layer added, then 3000HVGs selected
-        isolate_and_HVGs(os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes="all", isolation_dict={}, save_output=True, input_prefix="transition_clades")
+        # isolate_and_HVGs(os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", add_log1p=True, isolation_dict={"cancer_state_inferred_tree": ["transitional"]}, save_output=True, max_considered_genes=3000)
 
-        # normalized vs log normalized + start clade choosing for pseudotime
-        for projection in ["UMAP", "PCA"]:
-            cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "isolated", "isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected.h5ad"), selection_criteria={}, obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_clade", "cnv_score"], layers=["X", "log1p"], projection=projection, show=False, save_output=True, output_storage_subdir=os.path.join(OUTPUT_STORAGE_DIR, "plots", "log1p_vs_normalized", "all_cancer_states"))
-            cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "isolated", "isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected.h5ad"), selection_criteria={"cancer_state_inferred_tree":"transitional"}, obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_clade", "cnv_score"], layers=["X", "log1p"], projection=projection, show=False, save_output=True, output_storage_subdir=os.path.join(OUTPUT_STORAGE_DIR, "plots", "log1p_vs_normalized", "just_transitional"))
+        #cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "isolated", "isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["X", "log1p"], projection="UMAP", show=False, save_output=True)
+        #cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "isolated", "isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["X", "log1p"], projection="PCA", show=False, save_output=True)
+
+        #infer_pseudotime(input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "isolated", "isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"), origin_clade=28, flavor="monocle", save_output=True, input_prefix="isolated")
+        cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "pseudotime", "pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade", "monocle_pseudotime"], layers=["log1p"], projection="UMAP", show=False, save_output=True)
 
 
 

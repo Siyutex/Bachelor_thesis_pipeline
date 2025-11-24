@@ -1,0 +1,14 @@
+PCA log1p: looks almost exactly like in OG paper with cancer, ts and normal. we also have nice cancer
+state seperation (this time in transcriptional activity, not cnvs)
+
+PCA no log1p: got similar plot to RUN2, also see cnv scores are higher in cancer group which nicely
+aligns with cancer state inferred. Also not the yellow cells (very high cnv score) which are a bit 
+more distant from everything else - these might just be very transcriptionally active, but we should 
+inverstiage DEGs or highly expressed genes (which genes are the cnvs) later. 
+
+UMAP no log1p: we similar teardrop structure to RUN2 with cancer and non cancer quite close to each other.
+but we also see here that the nc cells have lower cnv score and we see that the seperation between
+c and nc is better than in RUN2 (probably because we did lib size 10K here)
+
+UMAO log1p: here we do see better c nc seperation and the transtitionl cells are also more "between"
+then normal and cancer cells

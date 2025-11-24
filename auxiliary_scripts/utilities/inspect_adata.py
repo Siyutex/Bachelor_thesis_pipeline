@@ -1,6 +1,6 @@
 import scanpy as sc
 
-FILE_LOCATION = r"/home/julian/Bachelor_thesis_pipeline/Data/output_storage/reduced/reduced_PDAC_ductal_cell.h5ad"
+FILE_LOCATION = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime/pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"
 layer_to_check = "X_scANVI_corrected"
 
 

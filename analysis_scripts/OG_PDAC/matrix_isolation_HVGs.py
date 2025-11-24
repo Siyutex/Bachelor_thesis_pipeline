@@ -11,15 +11,23 @@ def add_log1p_layer(adata):
     return new_adata
 
 
-def select_HVGs(adata, max_considered_genes) -> sc.AnnData:
+def select_HVGs(adata, max_considered_genes, use_log1p) -> sc.AnnData:
     
     # select HVGs, ignoring batch origin (since at this point, the data should be batch corrected)
     vprint("Selecting highly variable genes...")
-    sc.pp.highly_variable_genes(
-        adata,
-        flavor="seurat_v3",
-        n_top_genes=max_considered_genes,      # n_top_genes is the total number of HVGs across all batches
-    )
+    if use_log1p:
+        sc.pp.highly_variable_genes(
+            adata,
+            flavor="seurat",
+            n_top_genes=max_considered_genes,      # n_top_genes is the total number of HVGs across all batches
+            layer="log1p"
+        )
+    else:
+        sc.pp.highly_variable_genes(
+            adata,
+            flavor="seurat_v3",
+            n_top_genes=max_considered_genes,      # n_top_genes is the total number of HVGs across all batches
+        )
 
     n_highly_variable_genes = adata.var['highly_variable'].sum()
     vprint(f"Found {n_highly_variable_genes} highly variable genes across {adata.n_obs} cells")
@@ -68,10 +76,13 @@ def main():
     print("isolating main layer...")
     adata = hf.matrix_to_anndata(adata, main_layer).copy()
 
+    
     if add_log1p:
         print("Adding log1p layer...")
         adata = add_log1p_layer(adata).copy()
-
+        use_log1p = True
+    else:
+        use_log1p = False
 
     # isolate cells (eg transtion state) (do before HVG to only take HVGs relevant to those cells)
     adata = limit_cells(adata, isolation_dict).copy()
@@ -79,7 +90,7 @@ def main():
     # select HVGs
     if max_considered_genes != "all":
         print("selecting HVGs...")
-        adata = select_HVGs(adata, max_considered_genes)
+        adata = select_HVGs(adata, max_considered_genes, use_log1p)
     else:
         print("Skipping HVG selection...")
 

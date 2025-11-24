@@ -93,26 +93,44 @@ def compute_pseudotime_dpt(adata, n_pcs: int = 50, n_neighbors: int = 15):
 
 
 def compute_pseudotime_monocle(adata, root_cell_idx):
-    monocle.compute_cell_states()
-    monocle.differential_expression_genes()
-    monocle.learn_graph()
-    monocle.pseudotime()
-    monocle.regression_analysis()
+    # leanr graph first (takes umap and a set of clusters)
+    # then pseudotime (takes learn graph output, root cells, umap)
+    
+    # set internal adata
+    internal_adata = adata.copy()
 
-    return
+    # get umap
+    sc.pp.pca(internal_adata, n_comps=50, svd_solver="arpack")
+    sc.pp.neighbors(internal_adata, n_neighbors=15, n_pcs=50, use_rep="X_pca")
+    sc.tl.umap(internal_adata, min_dist=0.2) # same mindist as in plotting
+    umap = internal_adata.obsm["X_umap"] # is a numpy ndarray
+
+    # turn cnv clades into ndarray
+    cnv_clades = internal_adata.obs["cnv_clade"].to_numpy()
+
+    # learn principal graph
+    projected_points, mst, centroids = monocle.learn_graph(matrix=umap, clusters=cnv_clades)
+    
+    # order cells along pseudotime
+    pseudotime = monocle.order_cells(
+        matrix=umap,
+        centroids=centroids,
+        mst=mst,
+        projected_points=projected_points,
+        root_cells=root_cell_idx
+    )
+
+    # add pseudotime to adata
+    adata.obs["monocle_pseudotime"] = pseudotime
 
 
 
-def main(input_data_file, output_data_dir, origin_clade):
+def main(input_data_file, output_data_dir, origin_clade, flavor):
 
     adata = sc.read_h5ad(input_data_file)
 
     # import adata
-    internal_adata = adata.copy()
-
-    # check normalization, if not already done, normalize
-    print("Checking normalization...")
-    check_normalize(internal_adata)
+    internal_adata = hf.matrix_to_anndata(adata, "log1p")   
 
     # annotate root cell
     print("Annotating root cell...")
@@ -120,12 +138,13 @@ def main(input_data_file, output_data_dir, origin_clade):
     adata.uns["iroot"] = root_idx
     internal_adata.uns["iroot"] = root_idx
 
-    # prepare (pca, neighbors, diffmap) for pseudotime inference
-    print("Adding necessary fields for pseudotime inference...")
-    compute_pseudotime_dpt(internal_adata)
-
-    # add pseudotime to actual adata
-    adata.obs["pseudotime"] = internal_adata.obs["dpt_pseudotime"]
+    # add pseudotime to internal adata
+    if flavor == "monocle":
+        compute_pseudotime_monocle(internal_adata, root_idx)
+        adata.obs["monocle_pseudotime"] = internal_adata.obs["monocle_pseudotime"]
+    elif flavor == "dpt":
+        compute_pseudotime_dpt(internal_adata)
+        adata.obs["dpt_pseudotime"] = internal_adata.obs["dpt_pseudotime"]
 
     # save results
     print("Saving results...")
@@ -134,9 +153,9 @@ def main(input_data_file, output_data_dir, origin_clade):
 
 if __name__ == "__main__":
     # import cmd args
-    input_data_file, output_data_dir, origin_clade, verbose = hf.import_cmd_args(4)
+    input_data_file, output_data_dir, origin_clade, flavor, verbose = hf.import_cmd_args(4)
     vprint = hf.make_vprint(verbose)
 
-    main(input_data_file, output_data_dir, origin_clade)
+    main(input_data_file, output_data_dir, origin_clade, flavor)
 
     

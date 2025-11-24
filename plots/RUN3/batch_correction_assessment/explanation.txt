@@ -1,0 +1,8 @@
+these plots exist to show that the batch correction worked. They were created from the batch corrected file
+meaning they contain all cell types. They are normalized bcs of getnormalizedexpression from scanvi.
+they are not logarithmized, but that does not matter because we can still see great seperation in the
+UMAPs of cell types and better batch mixture than in the uncorrected UMAP.
+
+Also consider that the PCA is less expressive here than the UMAP because UMAP shows neighborhood closeness
+and PCA does not (and we care about this type of cloeseness here because same cell type would be 
+close to eachother)

@@ -1,0 +1,14 @@
+it is expected that the seperation of cnv clusters is not great here. This also happend in RUN2 and 
+the great seperation they get in the infer cnv docs correlates a lot with cell type.
+
+Yet we still see great seperation of cancer from normal cells, which is generall good, and we 
+also see that the cnv scores tend to be lower in the non cancer group (CS, CSI and CSIT) than
+in the cancer group which is also great. 
+
+Also the PCA looks like a giant blop, most likely because any existing axes of variation have
+been removed by the infercnv process (which culls low values and smooths with sliding window)
+so each cnv cluster has differnt genes highly expressed meaning there is no global axis of variation
+--> blob.
+
+
+Thus everything is as expected.

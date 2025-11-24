@@ -1,0 +1,3 @@
+the only very interesting thing here is thet the log1p umap has all nc cells (according to cancer_state)
+very close to each other and this also aligns with low cnv score, which might make it a good starting point
+for pseudotime. 
