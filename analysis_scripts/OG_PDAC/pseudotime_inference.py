@@ -7,6 +7,8 @@ import os
 import numpy as np
 from scipy.sparse import issparse
 import py_monocle as monocle
+import warnings
+import scipy
 
 
 def check_normalize(adata):
@@ -92,7 +94,7 @@ def compute_pseudotime_dpt(adata, n_pcs: int = 50, n_neighbors: int = 15):
     sc.tl.dpt(adata, n_dcs=n_neighbors)
 
 
-def compute_pseudotime_monocle(adata, root_cell_idx):
+def compute_pseudotime_monocle(adata, root_cell_idx, layer):
     # leanr graph first (takes umap and a set of clusters)
     # then pseudotime (takes learn graph output, root cells, umap)
     
@@ -100,7 +102,7 @@ def compute_pseudotime_monocle(adata, root_cell_idx):
     internal_adata = adata.copy()
 
     # get umap
-    sc.pp.pca(internal_adata, n_comps=50, svd_solver="arpack")
+    sc.pp.pca(internal_adata, n_comps=50, svd_solver="arpack", layer=layer)
     sc.pp.neighbors(internal_adata, n_neighbors=15, n_pcs=50, use_rep="X_pca")
     sc.tl.umap(internal_adata, min_dist=0.2) # same mindist as in plotting
     umap = internal_adata.obsm["X_umap"] # is a numpy ndarray
@@ -124,13 +126,61 @@ def compute_pseudotime_monocle(adata, root_cell_idx):
     adata.obs["monocle_pseudotime"] = pseudotime
 
 
+def return_smoothed_expression(adata, flavor, layer):
+    # takes internal adata with only one matrix in adata.X
+    # applies sliding window smoothing per gene along pseudotime
+        # use numpy.convole with box kernel (or scipy.uniform_filter1d, which is more efficient)
+        # mathematically, a convolution witha box kernel is equivalent to a moving average
+        # for the numy function this would mean in an example for 1 gene:
+            # function a = array of expression levels sorted by pseudotime index (f(x) = expression_level(pseudotime))
+            # function b = array of size window_size with values 1/window_size
+            # at the edges, where the kernel array stretches beyond the domain of the signal array, numpy pads the signal array with 0
+                # the scipy function lets you decide wether to pad with 0, or mirror neighboring values or repeat the closest singal value (the latter 2 are more acurate for pseudotime in biological cells (expression does not just drop to 0 in the cell, that would be a processing artifact))   
+    # returns new adata with changes applied
 
-def main(input_data_file, output_data_dir, origin_clade, flavor):
+    # define window size as franction of cells (amount of discrete values in pseudotime space)
+    if adata.n_obs < 1000:
+        warnings.warn("Less than 1000 cells in dataset, smoothing may be locally biased")
+    window_size = int(max(100, 0.1 * adata.n_obs)) # define window size as fraction of cells and make sure its an integer value
+    print(f"using window size: {window_size}")
+
+    # order cells by pseudotime
+    order = np.argsort(adata.obs[f"{flavor}_pseudotime"])
+    if layer in adata.layers.keys():
+        X = adata.layers[layer][order, :]
+    elif layer == "X":
+        X = adata.X[order, :]
+
+    # make sure X is a numpy array
+    if not isinstance(X, np.ndarray):
+        X = X.to_numpy()
+
+    # apply smoothing
+    smoothed = scipy.ndimage.uniform_filter1d(X, size=window_size, axis=0, mode="reflect")
+
+    # restore original order (incase anything relies on it)
+    inverse_order = np.argsort(order) # order is a list of indeces, first value that appears in the list is the index of the cell with lowest pseudotime; inverse order is a list of indeces, first value is the index at of the cell that was originally the first cell
+    smoothed = smoothed[inverse_order] # apply transform to restore original indexing
+
+    # apply smoothed matrix to new adata
+    adata_new = adata.copy()
+    if layer in adata_new.layers.keys():
+        del adata_new.layers[layer]
+        adata_new.layers[layer] = smoothed
+    elif layer == "X":
+        del adata_new.X
+        adata_new.X = smoothed
+
+    return adata_new
+
+
+
+def main(input_data_file, output_data_dir, origin_clade, flavor, layer, smoothe_expression):
 
     adata = sc.read_h5ad(input_data_file)
 
     # import adata
-    internal_adata = hf.matrix_to_anndata(adata, "log1p")   
+    internal_adata = adata.copy()   
 
     # annotate root cell
     print("Annotating root cell...")
@@ -139,12 +189,23 @@ def main(input_data_file, output_data_dir, origin_clade, flavor):
     internal_adata.uns["iroot"] = root_idx
 
     # add pseudotime to internal adata
+    print("Computing pseudotime...")
     if flavor == "monocle":
-        compute_pseudotime_monocle(internal_adata, root_idx)
+        compute_pseudotime_monocle(internal_adata, root_idx, layer)
         adata.obs["monocle_pseudotime"] = internal_adata.obs["monocle_pseudotime"]
     elif flavor == "dpt":
         compute_pseudotime_dpt(internal_adata)
         adata.obs["dpt_pseudotime"] = internal_adata.obs["dpt_pseudotime"]
+
+    if smoothe_expression == True:
+        print("Smoothing expression...")
+        internal_adata = return_smoothed_expression(internal_adata, flavor, layer)
+        if layer in adata.layers.keys():
+            del adata.layers[layer]
+            adata.layers[layer] = internal_adata.layers[layer]
+        elif layer == "X":
+            del adata.X
+            adata.X = internal_adata.X
 
     # save results
     print("Saving results...")
@@ -153,9 +214,9 @@ def main(input_data_file, output_data_dir, origin_clade, flavor):
 
 if __name__ == "__main__":
     # import cmd args
-    input_data_file, output_data_dir, origin_clade, flavor, verbose = hf.import_cmd_args(4)
+    input_data_file, output_data_dir, origin_clade, flavor, layer, smoothe_expression, verbose = hf.import_cmd_args(4)
     vprint = hf.make_vprint(verbose)
 
-    main(input_data_file, output_data_dir, origin_clade, flavor)
+    main(input_data_file, output_data_dir, origin_clade, flavor, layer, smoothe_expression)
 
     

@@ -1,0 +1,3 @@
+these plots come from monocle pseudotime smoothed with window size = 10% of cells.
+here we should just increase min dist a bit in umap and n_neighbours to get a plot which will look 
+very similar to what the lad have in the paper

@@ -758,12 +758,53 @@ def visualize_tree (tree_file, adata = None, obs_columns = None, ring_spacing: f
     return None
 
 
+def gene_expression_vs_obs(adata, x_axis: str, genes: list[str], layer):
+    # x_axis is a column in adata.obs
+    # x_axis should be sorted low -> high automatically
+    # genes is a list of genes to plot expression levels of 
+
+    # determine number of columns from number of plots
+    n_cols = np.round(np.sqrt(len(genes)*1.5)).astype(int) 
+    n_rows = np.ceil(len(genes)/n_cols).astype(int)
+    print(f"n_cols: {n_cols}, n_rows: {n_rows}")
+
+    # create figure
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols*4, n_rows*4))
+
+    # sort adata according to x_axis
+    adata_sorted = adata[adata.obs[x_axis].sort_values().index, :]
+
+    # plot each gene on one plot
+    current_loc = [0, 0]
+    for gene in genes:
+        print(f"current loc {current_loc}")
+
+        x = adata_sorted.obs[x_axis].to_list()
+        if layer in adata.layers.keys():
+            y = adata_sorted[:, adata_sorted.var["gene_symbols"] == gene].layers[layer].flatten().tolist()
+        elif layer == "X":
+            y = adata_sorted[:, adata_sorted.var["gene_symbols"] == gene].X.flatten().tolist()
+        axes[current_loc[0], current_loc[1]].plot(x, y)
+        axes[current_loc[0], current_loc[1]].set_title(f"{gene} expression vs {x_axis}")
+
+        if current_loc[1] == n_cols-1:
+            current_loc[0] += 1
+            current_loc[1] = 0
+        elif current_loc[1] < n_cols-1:
+            current_loc[1] += 1
+
+    plt.savefig(os.path.join(output_data_dir, f"{", ".join(genes)+ "_expression"}_vs_{x_axis}_for_{os.path.basename(input_data_file).removesuffix('.h5ad')}.png"))
+
+    if show: plt.show()
+    plt.close()
+    
+
+
+
 def main():
 
     # read data into anndata
     print("reading data...")
-    print(input_data_file)
-    print(type(input_data_file))
     if type(input_data_file) == str and ".h5ad" in input_data_file:
         adata = sc.read_h5ad(input_data_file)
         if verbose:
@@ -775,11 +816,8 @@ def main():
     
     # limit anndata to cells that fullfill all criteria
     print("limiting cells...")
+    vprint(f"Selection criteria:\n {selection_criteria}")
     adata = limit_cells(adata, selection_criteria).copy()# which column to use and what entry in that column to limit cells to
-    print("writing to json (DEBUG)")
-    with open (os.path.join(output_data_dir, "selection_criteria.json"), "w") as f: # dump used selection criteria for the run to json
-        json.dump(selection_criteria, f, indent=3)
-
 
     # UMAP / PCA plots + DEGs for each layer
     if "projections" in modules or "projections+DEGs" in modules:
@@ -806,6 +844,14 @@ def main():
     else:
         vprint("skipping phylogenetic_tree module...")
 
+    # gene expression vs any obs column
+    if "gene_expression_vs_obs" in modules:
+        for layer in layers:
+            print(f"plotting expression of {', '.join(genes)} vs {x_axis}... for layer {layer}")
+            gene_expression_vs_obs(adata, x_axis=x_axis, genes=genes, layer=layer)
+    else:
+        vprint("skipping gene_expression_vs_obs module...")
+
     # OTHER MODULE IDEAS
     # force directed graph for pseudotime
     # DEG heatmap
@@ -819,7 +865,7 @@ def main():
 if __name__ == "__main__":
     
     # import cmd args
-    input_data_file, output_data_dir, modules, selection_criteria, obs_annotations, layers, projection, marker_file_path, root_cell_idx, tree_file, target_circumference, sort_order, show, verbose, save = hf.import_cmd_args(15)
+    input_data_file, output_data_dir, modules, selection_criteria, obs_annotations, layers, projection, marker_file_path, root_cell_idx, tree_file, target_circumference, sort_order, x_axis, genes, show, verbose, save = hf.import_cmd_args(17)
     vprint = hf.make_vprint(verbose)
 
     if marker_file_path != None:
