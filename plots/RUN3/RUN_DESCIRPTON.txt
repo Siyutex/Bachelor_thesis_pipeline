@@ -1,0 +1,9 @@
+fixed normalization isse, transitional cells cluster nicely between normal and cancer cells now,
+pseudotime implemented and genes that switch in expression exist. The issue is the start clade selection
+because clade 28 is only transitional because it has the "high cnv" cells which get called cancerous
+but are actually just high mitochondrial expression stressed cells.
+
+So we need to filter out mito cells (after batch correction, because I don't want to 
+reprocess everything for such a small change), infer new cnv, tree,
+ plot pca and umap (xscnavicnv) of cs, csi, csit, clades, cnv score, (psot tree file) -> verify mito clades don'T exist anymore
+ new expression plot for clade selection, then limit to ts, log1p, hvg 3000, new pseudotime and hopefully we get a better start clade

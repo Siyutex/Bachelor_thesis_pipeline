@@ -1,0 +1,4 @@
+it seems that the very high cnv score (yellow) group in the normal cells just has a bunch of mitochondiral
+expression, which means they are probably dying, so not a great representation of normal cells
+
+ -> solution, remove mitochondrial genes after batch correction

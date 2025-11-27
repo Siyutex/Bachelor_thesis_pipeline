@@ -1,0 +1,3 @@
+we can see that gata6 seems to be upregulated in cancer (which is a canonical oncogene (associated with increased expression) so that is good)
+but only in the post bc expression matrix, which either indicates that the bc is a bit odd or that
+it worked much better than expected (but then again you'd expect myc to also be upregulated)

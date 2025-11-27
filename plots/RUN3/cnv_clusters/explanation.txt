@@ -5,10 +5,9 @@ Yet we still see great seperation of cancer from normal cells, which is generall
 also see that the cnv scores tend to be lower in the non cancer group (CS, CSI and CSIT) than
 in the cancer group which is also great. 
 
-Also the PCA looks like a giant blop, most likely because any existing axes of variation have
-been removed by the infercnv process (which culls low values and smooths with sliding window)
-so each cnv cluster has differnt genes highly expressed meaning there is no global axis of variation
---> blob.
+PCA looks quite good actually and we see transitional cells go between normal and cancer, which can 
+also be seen quite well in umap (although in umap global distances don't matter, but we still have 
+all transitionals cluster together in one neihbourhood)
 
 
 Thus everything is as expected.

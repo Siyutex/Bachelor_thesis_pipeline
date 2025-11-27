@@ -165,7 +165,7 @@ def plot_projection_and_DEGs(adata, layer):
     internal_adata = matrix_to_anndata(adata, layer)
 
     # normalize temp adata and store result in according field in internal adata 
-    if not hf.is_normalized(internal_adata) and layer != "X_cnv": # X_cnv is log normalized, so this check does not work (special case)
+    if not hf.is_normalized(internal_adata) and "_cnv" not in layer: # X_cnv is log normalized, so this check does not work (special case)
         vprint("normalizing data...")
         sc.pp.normalize_total(internal_adata, target_sum=1e4)
     else:
@@ -188,24 +188,34 @@ def plot_projection_and_DEGs(adata, layer):
     
     # quality checks before plotting
     vprint("quality checks before plotting...")
-    """if "cell_type" in colored_by and cell_type is not None:
-        colored_by.remove("cell_type")
-        vprint(f"{cell_type} cells are isolated, removing \"cell_type\" from colored_by list")"""
+    allowed = ( # list of all valid annotation options
+    list(internal_adata.obs.keys())
+    + list(internal_adata.var.get("gene_symbols", [])) # the [] option returns an empty list of the key does not exist
+    + list(internal_adata.var.get("gene_ids", []))
+    + list(internal_adata.var_names)
+    )
     for entry in colored_by:
-        if entry not in internal_adata.obs.keys():
+        if entry not in allowed: # color by option must either be an obs column or a gene (to color cells by expression level of that gene)
             colored_by.remove(entry)
-            vprint(f"{entry} is not in adata.obs, removing it from colored_by list")
+            vprint(f"{entry} is not in a valid annotation option, removing it from colored_by list")
 
+    # move used varname representation to internal_adata.var_names (UMAP cannot acces adata.var columns for coloring)
+    if any(entry in list(internal_adata.var.get("gene_symbols", [])) for entry in colored_by):
+        vprint("setting var_names to gene_symbols for projection plot coloring...")
+        internal_adata.var_names = list(internal_adata.var["gene_symbols"])
+    elif any(entry in list(internal_adata.var.get("gene_ids", [])) for entry in colored_by):
+        vprint("setting var_names to gene_ids for projection plot coloring...")
+        internal_adata.var_names = list(internal_adata.var["gene_ids"])
     
     # determine suitable number of columns for figure (rougly 1.5 times as many columns as rows)
     n_cols = np.round(np.sqrt(len(colored_by)*1.5)).astype(int) 
 
     # make sure annotatins with categories are colored by category and not continuous values
     for entry in colored_by:
-        if len(internal_adata.obs[entry].unique()) <= 20 or entry == "cnv_clade": # cnv clade yields continuous spectrum prbly bcs it has numpy floats
-            vprint(f"turning {entry} into categorical, unique values: {len(internal_adata.obs[entry].unique())}")
-            internal_adata.obs[entry] = pd.Categorical(internal_adata.obs[entry])
-
+        if entry in adata.obs.keys(): # if the entry is not in obs, it is a gene with continuous expression data, so surely not categorical
+            if len(internal_adata.obs[entry].unique()) <= 20 or entry == "cnv_clade": # cnv clade yields continuous spectrum prbly bcs it has numpy floats
+                vprint(f"turning {entry} into categorical. Unique values: {len(internal_adata.obs[entry].unique())}")
+                internal_adata.obs[entry] = pd.Categorical(internal_adata.obs[entry])
 
     # create a figure with one plot per color, save to temp, show if show is True
     if projection == "UMAP":
@@ -242,7 +252,8 @@ def plot_projection_and_DEGs(adata, layer):
         raise ValueError(f"projection {projection} is not supported")
 
     # for each grouping also run deg analysis
-    if "projctions+DEGs" in modules:
+    print(f"DEBUG modules: {modules}")
+    if "projections+DEGs" in modules:
         if internal_adata.shape[1] == adata.shape[1]: # proxy for varnames being copied over (can't run DEG if you don't know which genes are present)
             
             vprint("Preparping data for DEG analysis...")
@@ -777,13 +788,29 @@ def gene_expression_vs_obs(adata, x_axis: str, genes: list[str], layer):
     # plot each gene on one plot
     current_loc = [0, 0]
     for gene in genes:
-        print(f"current loc {current_loc}")
+        vprint(f"DEBUG: current loc in figure: {current_loc}")
 
         x = adata_sorted.obs[x_axis].to_list()
         if layer in adata.layers.keys():
-            y = adata_sorted[:, adata_sorted.var["gene_symbols"] == gene].layers[layer].flatten().tolist()
+            # check if gene in var_names or var["gene_symbols"] or var["gene_ids"]
+            if gene in adata_sorted.layers[layer].var["gene_symbols"]:
+                y = adata_sorted[:, adata_sorted.var["gene_symbols"] == gene].layers[layer].flatten().tolist()
+            elif gene in adata_sorted.var_names:
+                y = adata_sorted[:, adata_sorted.var_names == gene].layers[layer].flatten().tolist()
+            elif gene in adata_sorted.layers[layer].var["gene_ids"]:
+                y = adata_sorted[:, adata_sorted.var["gene_ids"] == gene].layers[layer].flatten().tolist()
+            else:
+                raise ValueError(f"Gene {gene} not found in layer adata.varnames, adata.var['gene_symbols'], or adata.var['gene_ids']. Please check your input data.")
         elif layer == "X":
-            y = adata_sorted[:, adata_sorted.var["gene_symbols"] == gene].X.flatten().tolist()
+            if gene in adata_sorted.var["gene_symbols"]:
+                y = adata_sorted[:, adata_sorted.var["gene_symbols"] == gene].X.flatten().tolist()
+            elif gene in adata_sorted.var_names:
+                y = adata_sorted[:, adata_sorted.var_names == gene].X.flatten().tolist()
+            elif gene in adata_sorted.var["gene_ids"]:
+                y = adata_sorted[:, adata_sorted.var["gene_ids"] == gene].X.flatten().tolist()
+            else:
+                raise ValueError(f"Gene {gene} not found in layer adata.varnames or adata.var['gene_symbols']. Please check your input data.")
+
         axes[current_loc[0], current_loc[1]].plot(x, y)
         axes[current_loc[0], current_loc[1]].set_title(f"{gene} expression vs {x_axis}")
 
