@@ -83,7 +83,7 @@ def filter_UMI_counts(adata, min_n_UMIs_percentile):
     adata = adata[adata.obs['n_counts'] > int(np.percentile(adata.obs['n_counts'], min_n_UMIs_percentile)), :]  # keep cells with more UMI counts than the 10th percentile
 
 
-def filter_mito_percentage(adata, max_n_MADs, var_names):
+def filter_mito_MAD(adata, max_n_MADs, var_names):
 
     if var_names == "gene_ids":
         adata.var["mito"] = adata.var["gene_symbols"].str.startswith("MT-")  # identify mitochondrial genes, assuming they start with "MT-"
@@ -93,6 +93,18 @@ def filter_mito_percentage(adata, max_n_MADs, var_names):
     adata.obs["pct_counts_mito"] = adata.X[:, adata.var["mito"].values].sum(axis=1) / adata.X.sum(axis=1)
     mito_cutoff = np.median(adata.obs['pct_counts_mito']) + max_n_MADs * np.median(np.abs(adata.obs['pct_counts_mito'] - np.median(adata.obs['pct_counts_mito']))) # median + MAD
     adata = adata[adata.obs['pct_counts_mito'] < mito_cutoff, :]
+
+
+def filter_mito_percent(adata, percent_mito_cutoff, var_names):
+
+    if var_names == "gene_ids":
+        adata.var["mito"] = adata.var["gene_symbols"].str.startswith("MT-")  # identify mitochondrial genes, assuming they start with "MT-"
+    elif var_names == "gene_symbols":
+        adata.var["mito"] = adata.var_names.str.startswith("MT-")
+    
+    adata.obs["pct_counts_mito"] = adata.X[:, adata.var["mito"].values].sum(axis=1) / adata.X.sum(axis=1)
+    adata = adata[adata.obs['pct_counts_mito'] < percent_mito_cutoff, :]
+
 
 
 def filter_doublets(adata, expected_doublet_percentage):
@@ -119,6 +131,7 @@ def main(input_data_file_or_dir,
          min_n_cells_percentage, 
          min_n_UMIs_percentile, 
          max_n_MADs, 
+         max_mito_percentage,
          expected_doublet_percentage):
 
     print("reading input data...")
@@ -131,8 +144,15 @@ def main(input_data_file_or_dir,
     print("filtering cells with low UMI counts...")
     filter_UMI_counts(adata, min_n_UMIs_percentile)
 
-    print("filtering cells with high mitochondrial gene expression...")
-    filter_mito_percentage(adata, max_n_MADs, var_names=var_names)
+
+    if max_n_MADs != None:
+        print(f"filtering cells with high mitochondrial gene expression > median + {max_n_MADs} MADs...")
+        filter_mito_MAD(adata, max_n_MADs, var_names=var_names)
+    elif max_mito_percentage != None:
+        print(f"filtering cells with high mitochondrial gene expression > {max_mito_percentage}%...")
+        filter_mito_percent(adata, max_mito_percentage, var_names=var_names)
+    else:
+        print("No mitochondrial filtering applied")
 
     print("removing doublets...")
     filter_doublets(adata, expected_doublet_percentage)
@@ -171,7 +191,8 @@ if __name__ == "__main__":
     min_n_cells_percentage = filtering_params_list[1]
     min_n_UMIs_percentile = filtering_params_list[2]
     max_n_MADs = filtering_params_list[3]
-    expected_doublet_percentage = filtering_params_list[4]
+    max_mito_percentage = filtering_params_list[4]
+    expected_doublet_percentage = filtering_params_list[5]
 
 
     ## execute functions
@@ -182,5 +203,6 @@ if __name__ == "__main__":
          min_n_cells_percentage, 
          min_n_UMIs_percentile, 
          max_n_MADs, 
+         max_mito_percentage,
          expected_doublet_percentage)
 

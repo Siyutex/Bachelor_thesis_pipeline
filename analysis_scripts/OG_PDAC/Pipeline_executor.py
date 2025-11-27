@@ -327,6 +327,7 @@ def cluster_and_plot(
 class FilteringParameters:
     """
     Configuration for filtering low-quality cells and genes from single-cell data.
+    If any parameter is None, the corresponding filtering step will not be carried out. 
 
     Attributes:
         min_n_genes_percentile: 
@@ -346,7 +347,8 @@ class FilteringParameters:
     min_n_genes_percentile: int = 10
     min_n_cells_percentage: float = 0.01
     min_n_UMIs_percentile: int = 10
-    max_n_MADs: int = 1
+    max_n_MADs: int = None
+    max_mito_percentage: float = 0.15
     expected_doublet_percentage: float = 0.024
 
 def preprocess_data(
@@ -397,6 +399,7 @@ def preprocess_data(
         filtering_params.min_n_cells_percentage,
         filtering_params.min_n_UMIs_percentile,
         filtering_params.max_n_MADs,
+        filtering_params.max_mito_percentage,
         filtering_params.expected_doublet_percentage,
     ]
 
@@ -469,7 +472,7 @@ def annotate_cell_types(
         (score for each cell type denoted in the marker file, chosen cell type for each cell)
     - if model is cellassign:
         [str: "cell_type"]
-        (ratio of a cell's UMI counts to average cell's counts, cell type prediction for each cell)
+        (cell type prediction for each cell)
 
     Parameters:
         input_data_dir (str): path to directory containing h5ad files to annotate.
@@ -478,12 +481,13 @@ def annotate_cell_types(
             This should be a json with cell type names as keys and lists of marker gene symbols as values.
         negative_marker_file_path (str, optional): path to file with negative marker genes for each cell type.
             This should be a json with cell type names as keys and lists of marker gene symbols as values.
+            Only used if model is "z_score".
         model (Literal["z_score","cellassign"], optional): which model to use. Defaults to "z_score".
         cutoff_unsure (float, optional): a value between 0 and 1, specifying how high the second highest 
             score can at most be relative to the highest to still annotate a well defined cell type
-            Defaults to 0.8 (0.8 times highest score).
+            Defaults to 0.8 (0.8 times highest score). Only used if model is "z_score".
         cutoff_other (float, optional): how many stdevs above / below the mean score the lowest cell type 
-            score has to be to annotate a well defined cell type. Defaults to -0.2.
+            score has to be to annotate a well defined cell type. Defaults to -0.2. Only used if model is "z_score".
         save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/cell_type_annotated. Defaults to False.
         input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "preprocessed".
         output_prefix (str, optional): prefix for output file names. Defaults to "cell_type_annotated".
@@ -730,7 +734,7 @@ def get_phylogenetic_tree(
         save_output: bool = False,
         input_prefix: str = "reduced",
         output_prefix: str = "transition_clades",
-        verbose: bool = False) -> None:
+        verbose: bool = False) -> list[str]:
     
     """
     Create a neighbor joining tree of correlation distances between CNV profiles of cells.
@@ -765,7 +769,7 @@ def get_phylogenetic_tree(
         verbose (bool, optional): whether to print verbose output. Defaults to False.
 
     Returns:
-        list[str]: list of paths to output files.
+        list[str]: list of paths to output files. One h5ad file and one newick tree file.
     """
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have relevant folder, if not create it
@@ -785,15 +789,16 @@ def get_phylogenetic_tree(
     # rename output file (this is the h5ad file) (tree naming happens in subprocess) 
     os.rename(os.path.join(output_temp_dir, os.path.basename(input_data_file)), os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}.h5ad"))
 
-    # add output file to output_file_list
-    output_file_list.append(output_temp_dir)
+    # add output files to output_file_list
+    for output_file in os.listdir(output_temp_dir):
+        output_file_list.append(os.path.join(output_temp_dir, output_file))
 
     # if specified, permanently store a copy of the temporary output files from the output_temp_dir
     if save_output == True:
         for file in os.listdir(output_temp_dir):
             shutil.copy(os.path.join(output_temp_dir, file), os.path.join(output_storage_dir, file))
 
-    return output_file_list # here we just forward the entire dir (tree + h5ad file, selection should happen outside of the function)
+    return output_file_list # contains h5ad file and newick tree file paths
 
 
 def isolate_and_HVGs(
@@ -807,9 +812,10 @@ def isolate_and_HVGs(
         output_prefix: str = "isolated",
         verbose: bool = False) -> list[str]:
     """ 
-    Move main layer to adata.X, purge everything else. Then add optionally add log1p layer of main layer.
-    Optionally compute HVGs (are computed on log1p layer, if log1p layer is added). Optionally isolate cells
-    according to isolation_dict.
+    Move main layer to adata.X, purge everything else. Optionally add log1p layer of main layer.
+    Optionally isolate cells according to isolation_dict.
+    Optionally compute HVGs (are computed on log1p layer, if log1p layer is added). 
+    In this order.
 
     Input should be an h5ad file.
 
@@ -1028,81 +1034,49 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         pass  # SIGHUP not available on Windows
 
     # --- main loop ---
-    use_ensebml_ids = True # define whether to use ensembl ids, used for entire pipeline to avoid mismatches
 
     try:
+        # RUN 3 artifacts
+            #mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
+            # temp_output_files = preprocess_data(RAW_DATA_DIRS[0], mode, use_ensembl_ids=use_ensebml_ids, save_output=False, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0))
+            # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensebml_ids, r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\negative_markers.json", model="cellassign", verbose=True, save_output=True)
+            # output_path_list = aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), save_output=True, verbose=True)
 
-        #mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
-        # temp_output_files = preprocess_data(RAW_DATA_DIRS[0], mode, use_ensembl_ids=use_ensebml_ids, save_output=False, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0))
-        # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensebml_ids, r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\negative_markers.json", model="cellassign", verbose=True, save_output=True)
-        # output_path_list = aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), save_output=True, verbose=True)
-        
+            # isolate_and_HVGs(input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree": ["transitional"]}, save_output=True)
+            # infer_pseudotime(input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", origin_clade=28, flavor="monocle", save_output=True, input_prefix="isolated", smoothe_expression=True, layer="log1p")
+            # cluster_and_plot(["gene_expression_vs_obs"], input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime/pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", x_axis="monocle_pseudotime", genes=["SAMD11", "PLEKHN1", "RNF223", "C1orf159"], show=True, save_output=True, layers=["log1p"])
 
-        import scanpy as sc
-        def check_library_size(input_data_file: str, layer: str):
-            adata = sc.read_h5ad(input_data_file)
-            if layer in adata.layers.keys():
-                library_sizes = adata.layers[layer].sum(axis=1)
-            elif layer in adata.obsm.keys():
-                library_sizes = adata.obsm[layer].sum(axis=1)
-            elif layer == "X":
-                library_sizes = adata.X.sum(axis=1)
-            print(f"Library sizes for layer {layer}: {library_sizes}")
+            #cluster_and_plot(["projections"], input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime/pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade", "monocle_pseudotime"], layers=["log1p"], projection="UMAP", save_output=True)
+            #cluster_and_plot(["projections"], input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime/pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade", "monocle_pseudotime"], layers=["log1p"], projection="PCA", save_output=True)
 
-            b = np.full((library_sizes.shape[0], 1), 10000) # all library sizes should be 10000
-            if not np.allclose(library_sizes, b, atol=10): # don't care if counts vary by 10 for whatever reason
-                raise Exception(f"Library sizes are not uniform in layer {layer}")
-            
-        def print_adata_info(input_data_file: str):
-            adata = sc.read_h5ad(input_data_file)
-            print(f"Adata summary: \n{adata}")
-            if adata.X != None:
-                print(f"Head of adata.X: \n{adata.X[:5]}")
-            for layer in adata.layers.keys():
-                print(f"Layer {layer} summary: \n{adata.layers[layer]}")
-            for layer in adata.obsm.keys():
-                print(f"Obsm {layer} summary: \n{adata.obsm[layer]}")
-            
-        r"""output_path_list = correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_PDAC.h5ad"), save_output=True, verbose=True, max_considered_genes="all")
-        for output in output_path_list:
-            check_library_size(output, "X_scANVI_corrected")
-            print_adata_info(output)"""
-        
-        r"""output_path_list = infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), corrected_representation="X_scANVI_corrected", cell_type="ductal_cell", save_output=True, verbose=True)
-        for output in output_path_list:
-            check_library_size(output, "X_scANVI_corrected")
-            print_adata_info(output)
+        # RUN 3.5
+        use_ensembl_ids = True
+        mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
+        for data_dir in RAW_DATA_DIRS:
+            preprocess_data(data_dir, mode, use_ensembl_ids=use_ensembl_ids, save_output=True, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0, max_n_MADs=None, max_mito_percentage=0.15))
+        annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensembl_ids, os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), model="cellassign", verbose=True, save_output=True)
+        output_path_list = aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), save_output=True, verbose=True)
+        output_path_list = correct_batch_effects(output_path_list[0], max_considered_genes="all", save_output=True, verbose=True)
+        output_path_list = infer_CNVs(output_path_list[0], corrected_representation="X_scANVI_corrected", reference_genome_path=os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), cell_type="ductal_cell", save_output=True, verbose=True)
+        output_path_list = reduce_data(output_path_list[0], input_prefix="CNV_inferred", layers_to_remove=["X", "X_scANVI_corrected_gene_values_cnv", "X_scVI_corrected"], save_output=True, verbose=True)
+        output_path_list = get_phylogenetic_tree(output_path_list[0], cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state_inferred", transition_entropy_threshold=0.8, save_output=True, verbose=True)
+        tree_file = None
+        h5ad_file = None
+        for file in output_path_list:
+            if ".nwk" in file:
+                tree_file = file
+            elif ".h5ad" in file:
+                h5ad_file = file
+        #plots for cnv cluster validation
+        for projection in ["UMAP", "PCA"]:
+            cluster_and_plot(["projections"], input_data_file=h5ad_file, obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["X_scANVI_corrected_cnv"], projection=projection, output_storage_subdir="CNV_matrix_check", save_output=True, verbose=True, show=False)                
+        #tree plot
+        cluster_and_plot(["phylogenetic_tree"], input_data_file=h5ad_file, tree_file=tree_file, output_storage_subdir="tree", save_output=True, verbose=True, show=False)
+        output_path_list = isolate_and_HVGs(h5ad_file, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, save_output=True, verbose=True)
+        # plots for clade selection
+        for projection in ["UMAP", "PCA"]:
+            cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection=projection, output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
 
-        output_path_list = reduce_data(output_path_list[0], input_prefix="CNV_inferred", layers_to_remove=["X_scVI_corrected", "X_scANVI_corrected_gene_values_cnv", "X"], save_output=True, verbose=True)
-        for output in output_path_list:
-            check_library_size(output, "X_scANVI_corrected")
-            print_adata_info(output)
-
-        output_path_list = get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), "X_scANVI_corrected_cnv", distance_metric="euclidean", grouping_metric="cancer_state_inferred", transition_entropy_threshold=0.8, save_output=True, verbose=True)
-        for output in output_path_list:
-            check_library_size(output, "X_scANVI_corrected")
-            print_adata_info(output)"""
-
-        r"""# plots to validate batch correction
-        for projection in ["PCA"]: # add "UMAP"
-            cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_PDAC.h5ad"), selection_criteria={}, obs_annotations=["batch", "cell_type", "cancer_state"], layers=["X_scANVI_corrected", "X"], projection=projection, show=False, save_output=True, output_storage_subdir=os.path.join(OUTPUT_STORAGE_DIR, "plots", "batch_correction_assessment"))
-        """
-        r"""# plots of cnv clusters
-        for projection in ["PCA"]: # add "UMAP"
-            cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), selection_criteria={}, obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_clade", "cnv_score"], layers=["X_scANVI_corrected_cnv"], projection=projection, show=True, save_output=False, output_storage_subdir=os.path.join(OUTPUT_STORAGE_DIR, "plots", "cnv_clusters"))
-        
-        # tree plot
-        cluster_and_plot(["phylogenetic_tree"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree"], show=False, save_output=True, tree_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "cnv_tree_reduced_PDAC_ductal_cell.nwk"))
-        """
-
-        # isolate_and_HVGs(input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree": ["transitional"]}, save_output=True)
-        # infer_pseudotime(input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", origin_clade=28, flavor="monocle", save_output=True, input_prefix="isolated", smoothe_expression=True, layer="log1p")
-        # cluster_and_plot(["gene_expression_vs_obs"], input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime/pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", x_axis="monocle_pseudotime", genes=["SAMD11", "PLEKHN1", "RNF223", "C1orf159"], show=True, save_output=True, layers=["log1p"])
-
-        #cluster_and_plot(["projections"], input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime/pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade", "monocle_pseudotime"], layers=["log1p"], projection="UMAP", save_output=True)
-        #cluster_and_plot(["projections"], input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime/pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade", "monocle_pseudotime"], layers=["log1p"], projection="PCA", save_output=True)
-
-        
 
 
         purge_tempfiles()
