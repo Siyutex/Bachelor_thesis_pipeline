@@ -1,4 +1,9 @@
 it seems that the very high cnv score (yellow) group in the normal cells just has a bunch of mitochondiral
 expression, which means they are probably dying, so not a great representation of normal cells
 
+
+this was run on transtion_clades... from RUN3, the average mitchondrial gene expression in the 
+cells with cnv_score > 0.01 (the yellow clusters) is 0.714 according to the relevant script in utilities
+(which is leagues above 0.15 and definitely dying)
+
  -> solution, remove mitochondrial genes after batch correction
