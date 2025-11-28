@@ -61,7 +61,8 @@ def _read_dot_matrix(file_path, var_names):
     return sc.AnnData(df.T)
 
 
-def filter_cells_genes(adata, min_n_genes_percentile, min_n_cells_percentage):
+def filter_cells_genes(adata, min_n_genes_percentile, min_n_cells_percentage) -> None:
+    """filters adata inplace, does not return anything"""
 
     # standardize adata to use scipy sparse matrix for X, or getnnz will not work
     if type(adata.X) != sparse.csc_matrix:
@@ -76,14 +77,16 @@ def filter_cells_genes(adata, min_n_genes_percentile, min_n_cells_percentage):
     sc.pp.filter_genes(adata, min_cells=int(min_n_cells_percentage*adata.n_obs))  # filter genes expressed in less than 1% of cells
 
 
-def filter_UMI_counts(adata, min_n_UMIs_percentile):
+def filter_UMI_counts(adata, min_n_UMIs_percentile) -> sc.AnnData:
 
     # remove cells with less UMI counts than the 10th percentile
     adata.obs['n_counts'] = np.array(adata.X.sum(axis=1)).flatten() # add all umi counts for each cell (row)
-    adata = adata[adata.obs['n_counts'] > int(np.percentile(adata.obs['n_counts'], min_n_UMIs_percentile)), :]  # keep cells with more UMI counts than the 10th percentile
+    new_adata = adata[adata.obs['n_counts'] > int(np.percentile(adata.obs['n_counts'], min_n_UMIs_percentile)), :]  # keep cells with more UMI counts than the 10th percentile
+
+    return new_adata
 
 
-def filter_mito_MAD(adata, max_n_MADs, var_names):
+def filter_mito_MAD(adata, max_n_MADs, var_names) -> sc.AnnData:
 
     if var_names == "gene_ids":
         adata.var["mito"] = adata.var["gene_symbols"].str.startswith("MT-")  # identify mitochondrial genes, assuming they start with "MT-"
@@ -92,10 +95,12 @@ def filter_mito_MAD(adata, max_n_MADs, var_names):
     
     adata.obs["pct_counts_mito"] = adata.X[:, adata.var["mito"].values].sum(axis=1) / adata.X.sum(axis=1)
     mito_cutoff = np.median(adata.obs['pct_counts_mito']) + max_n_MADs * np.median(np.abs(adata.obs['pct_counts_mito'] - np.median(adata.obs['pct_counts_mito']))) # median + MAD
-    adata = adata[adata.obs['pct_counts_mito'] < mito_cutoff, :]
+    new_adata = adata[adata.obs['pct_counts_mito'] < mito_cutoff, :]
+
+    return new_adata
 
 
-def filter_mito_percent(adata, percent_mito_cutoff, var_names):
+def filter_mito_percent(adata, percent_mito_cutoff, var_names) -> sc.AnnData:
 
     if var_names == "gene_ids":
         adata.var["mito"] = adata.var["gene_symbols"].str.startswith("MT-")  # identify mitochondrial genes, assuming they start with "MT-"
@@ -103,15 +108,28 @@ def filter_mito_percent(adata, percent_mito_cutoff, var_names):
         adata.var["mito"] = adata.var_names.str.startswith("MT-")
     
     adata.obs["pct_counts_mito"] = adata.X[:, adata.var["mito"].values].sum(axis=1) / adata.X.sum(axis=1)
-    adata = adata[adata.obs['pct_counts_mito'] < percent_mito_cutoff, :]
+    new_adata = adata[adata.obs['pct_counts_mito'] < percent_mito_cutoff, :]
+
+    return new_adata
 
 
-
-def filter_doublets(adata, expected_doublet_percentage):
+def filter_doublets(adata, expected_doublet_percentage) -> sc.AnnData:
 
     # remove doublets using scrublet
     sc.pp.scrublet(adata, expected_doublet_rate=expected_doublet_percentage, verbose=verbose) # boolean prediction in .obs['predicted_doublet']
-    adata = adata[~adata.obs['predicted_doublet']] # ~ is a bitwise NOT operator, so we keep all cells where predicted_doublet == False
+    new_adata = adata[~adata.obs['predicted_doublet']] # ~ is a bitwise NOT operator, so we keep all cells where predicted_doublet == False
+
+    return new_adata
+
+
+def validate_data(adata, max_mito_percentage):
+    # make sure the resulting adata fullfills the requirements
+
+    # check cell with highest mitchondrial expression (should be <= max_mito_percentage)
+    mito_percentage = adata.obs["pct_counts_mito"].max()
+    vprint(f"Cell with highest mitochondrial percentage: {adata.obs[adata.obs['pct_counts_mito'] == mito_percentage].index[0]}")
+    vprint(f"Mitochondrial percentage of this cell: {mito_percentage:.3f}")
+    assert mito_percentage <= max_mito_percentage
 
 
 def save_output(adata, input_data_file_or_dir, output_dir):
@@ -139,23 +157,26 @@ def main(input_data_file_or_dir,
 
     print(f"{adata.shape[0]} cells and {adata.shape[1]} genes present before filtering")
     print("filtering cells and genes...")
-    filter_cells_genes(adata, min_n_genes_percentile, min_n_cells_percentage)
+    filter_cells_genes(adata, min_n_genes_percentile, min_n_cells_percentage) # modifies adata inplace, no new assignment needed
 
     print("filtering cells with low UMI counts...")
-    filter_UMI_counts(adata, min_n_UMIs_percentile)
+    adata = filter_UMI_counts(adata, min_n_UMIs_percentile) # this and all following function do NOT MODIFY INPLACE, assign new adata for each
 
 
     if max_n_MADs != None:
-        print(f"filtering cells with high mitochondrial gene expression > median + {max_n_MADs} MADs...")
-        filter_mito_MAD(adata, max_n_MADs, var_names=var_names)
+        print(f"filtering out cells with high mitochondrial gene expression > median + {max_n_MADs} MADs...")
+        adata = filter_mito_MAD(adata, max_n_MADs, var_names=var_names)
     elif max_mito_percentage != None:
-        print(f"filtering cells with high mitochondrial gene expression > {max_mito_percentage}%...")
-        filter_mito_percent(adata, max_mito_percentage, var_names=var_names)
+        print(f"filtering out cells with high mitochondrial gene expression > {max_mito_percentage * 100}%...")
+        adata = filter_mito_percent(adata, max_mito_percentage, var_names=var_names)
     else:
         print("No mitochondrial filtering applied")
 
     print("removing doublets...")
-    filter_doublets(adata, expected_doublet_percentage)
+    adata = filter_doublets(adata, expected_doublet_percentage)
+
+    print("validating data...")
+    validate_data(adata, max_mito_percentage)
 
     # print to console how many cells and genes are left after preprocessing
     print(f"{adata.shape[0]} cells and {adata.shape[1]} genes left after preprocessing")

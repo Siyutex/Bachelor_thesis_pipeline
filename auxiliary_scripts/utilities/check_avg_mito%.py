@@ -2,7 +2,7 @@ import scanpy as sc
 import helper_functions as hf
 
 
-def get_mito_percentage(adata, layer, cnv_score):
+def get_mito_percentage_by_cnvscore(adata, layer, cnv_score):
     # print average mito percentage per cell with cnv score > cnv_score
     
     # isolate cells with cnv score > cnv_score
@@ -16,12 +16,23 @@ def get_mito_percentage(adata, layer, cnv_score):
     print(f"Average mitochondrial gene expression in cells with cnv_score > {cnv_score}: {mito_percentage:.3f}")
 
 
+def get_global_highest_mito_percentage(adata):
+    # find cell with highest pct_counts_mito
+
+    mito_percentage = adata.obs["pct_counts_mito"].max()
+
+    print(f"Cell with highest mitochondrial percentage: {adata.obs[adata.obs['pct_counts_mito'] == mito_percentage].index[0]}")
+    print(f"Mitochondrial percentage of this cell: {mito_percentage:.3f}")
+
 if __name__ == "__main__":
 
-    FILE_LOCATION = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/RUN3_old_data/tree/transition_clades_PDAC_ductal_cell.h5ad"
+    FILE_LOCATION = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/preprocessed/preprocessed_PDAC_cancerous_0.h5ad"
 
     print("Reading data...")
     adata = sc.read_h5ad(FILE_LOCATION)
 
-    print("Getting mitochondrial percentage...")
-    get_mito_percentage(adata, "X_scANVI_corrected", 0.01)
+    # print("Getting mitochondrial percentage...")
+    # get_mito_percentage_by_cnvscore(adata, "X_scANVI_corrected", 0.01)
+
+    print("Finding cell with highest mitochondrial expression")
+    get_global_highest_mito_percentage(adata)

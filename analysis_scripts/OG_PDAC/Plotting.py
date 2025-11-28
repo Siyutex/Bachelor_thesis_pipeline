@@ -213,7 +213,7 @@ def plot_projection_and_DEGs(adata, layer):
     # make sure annotatins with categories are colored by category and not continuous values
     for entry in colored_by:
         if entry in adata.obs.keys(): # if the entry is not in obs, it is a gene with continuous expression data, so surely not categorical
-            if len(internal_adata.obs[entry].unique()) <= 20 or entry == "cnv_clade": # cnv clade yields continuous spectrum prbly bcs it has numpy floats
+            if len(internal_adata.obs[entry].unique()) <= 10 or entry == "cnv_clade": # cnv clade yields continuous spectrum prbly bcs it has numpy floats
                 vprint(f"turning {entry} into categorical. Unique values: {len(internal_adata.obs[entry].unique())}")
                 internal_adata.obs[entry] = pd.Categorical(internal_adata.obs[entry])
 

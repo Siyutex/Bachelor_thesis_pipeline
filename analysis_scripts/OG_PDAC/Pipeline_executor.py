@@ -1049,7 +1049,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             #cluster_and_plot(["projections"], input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime/pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade", "monocle_pseudotime"], layers=["log1p"], projection="UMAP", save_output=True)
             #cluster_and_plot(["projections"], input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime/pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade", "monocle_pseudotime"], layers=["log1p"], projection="PCA", save_output=True)
 
-        # RUN 3.5
+        # RUN 3.5 full run pipeline
         use_ensembl_ids = True
         mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
         for data_dir in RAW_DATA_DIRS:
@@ -1070,14 +1070,13 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         #plots for cnv cluster validation
         for projection in ["UMAP", "PCA"]:
             cluster_and_plot(["projections"], input_data_file=h5ad_file, obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["X_scANVI_corrected_cnv"], projection=projection, output_storage_subdir="CNV_matrix_check", save_output=True, verbose=True, show=False)                
-        #tree plot
-        cluster_and_plot(["phylogenetic_tree"], input_data_file=h5ad_file, tree_file=tree_file, output_storage_subdir="tree", save_output=True, verbose=True, show=False)
+        # tree plot (CANNOT RUN ON CLUSTER, BCS PLOTLY NEEDS MANUAL SAVING)
+        # cluster_and_plot(["phylogenetic_tree"], input_data_file=h5ad_file, tree_file=tree_file, output_storage_subdir="tree", save_output=True, verbose=True, show=False)
         output_path_list = isolate_and_HVGs(h5ad_file, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, save_output=True, verbose=True)
         # plots for clade selection
         for projection in ["UMAP", "PCA"]:
             cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection=projection, output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
-
-
+        
 
         purge_tempfiles()
         sys.exit(0)
