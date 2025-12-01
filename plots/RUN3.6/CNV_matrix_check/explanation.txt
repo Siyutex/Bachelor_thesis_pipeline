@@ -1,0 +1,7 @@
+we got 5 groups really:
+- stressed normal cells to the very left (got a few yellow points -> high expr, but still cluster with normals)
+- normal cells to their right
+- transitional cells to their right
+- and then 2 groups of cancer cells with different cnv profiles above and below the transitional cells
+
+we see this in both umap and pca, so quite consistent in terms of neighbours and global distances

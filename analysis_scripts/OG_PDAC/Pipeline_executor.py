@@ -1051,8 +1051,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             #cluster_and_plot(["projections"], input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime/pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade", "monocle_pseudotime"], layers=["log1p"], projection="UMAP", save_output=True)
             #cluster_and_plot(["projections"], input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime/pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade", "monocle_pseudotime"], layers=["log1p"], projection="PCA", save_output=True)
 
-        # RUN 3.5 full run pipeline
-        use_ensembl_ids = True
+        # RUN 3.5 / 3.6 full run pipeline (3.6 used mean + 1MAD for mito fitlering, 3.5 used 15% mito expression cutoff)
+        r"""use_ensembl_ids = True
         mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
         for data_dir in RAW_DATA_DIRS:
             preprocess_data(data_dir, mode, use_ensembl_ids=use_ensembl_ids, save_output=True, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0, max_n_MADs=1, max_mito_percentage=None))
@@ -1078,7 +1078,9 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # plots for clade selection
         for projection in ["UMAP", "PCA"]:
             cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection=projection, output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
-        
+        """
+
+        cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "RUN3.6", "isolated", "isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_clade", "cnv_score"], layers=["log1p"], projection="UMAP", show=True, save_output=True)
 
         purge_tempfiles()
         sys.exit(0)

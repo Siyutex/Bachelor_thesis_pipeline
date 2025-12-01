@@ -1,0 +1,5 @@
+equal to 3.5 but the fact that we used mean + 1 mad for mito filtering here.
+We do see that the amount of transitional cells is very volatile to initial conditions
+(prbly because of noise on the neighbour graph), so we want to use and alternative method for 
+malignancy calling (or a combination method) so we do scMalignantFinder (and perhaps use its interseciton
+with infercnv cancer_state_inferred for the malignant and normal cells)

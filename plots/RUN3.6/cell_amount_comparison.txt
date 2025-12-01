@@ -1,0 +1,23 @@
+in RUN3 we had:
+all cells post preprocessing: 63986
+just ductal cells: 9869
+just transitional ductal cells: 2609
+
+
+in run 3.5, where the preprocessing filtering (other than filtercells and filtergenes actually worked (last time I made a function interal adata for every filtering step but never returned it))
+all cells post preprocessing: 47894
+just ductal cells: 3512
+just transitional ductal cells: 571
+
+
+run 3.6, we just changed mito filtering to median + one MAD instead of flat 15 % and got:
+post pp: 40950
+just ductal: 2251
+just transitional ductal cells: 900
+
+
+
+so we conclude that a big chunk of the cells we used in RUN3 might not have been of the best quality
+And that the amount of transitional cells depends largely on how they c / nc split around the tree
+and not on the amounts of cells that pass quality checks.
+TRANSITION CLADE DEFINING METHOD IS VOLATILE --> discussion

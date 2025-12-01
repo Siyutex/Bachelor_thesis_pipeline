@@ -1,0 +1,5 @@
+reprocessing from beginning, this time preprocessing filters actualy wokred (last time i never
+returtned the fitlered adata so only fitler cells and filter genes worked), but maybe we 
+are a little aggressive on the mito part with the 15% now, so I will reprocess again but do the
+max n mad = 1 method (I checked visually so it should be fine, last time it was only problematic
+because the changes weren't applied to the main adata)
