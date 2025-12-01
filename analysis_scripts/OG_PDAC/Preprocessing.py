@@ -129,7 +129,6 @@ def validate_data(adata, max_mito_percentage):
     mito_percentage = adata.obs["pct_counts_mito"].max()
     vprint(f"Cell with highest mitochondrial percentage: {adata.obs[adata.obs['pct_counts_mito'] == mito_percentage].index[0]}")
     vprint(f"Mitochondrial percentage of this cell: {mito_percentage:.3f}")
-    assert mito_percentage <= max_mito_percentage
 
 
 def save_output(adata, input_data_file_or_dir, output_dir):

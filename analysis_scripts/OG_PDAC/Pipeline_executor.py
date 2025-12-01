@@ -327,7 +327,7 @@ def cluster_and_plot(
 class FilteringParameters:
     """
     Configuration for filtering low-quality cells and genes from single-cell data.
-    If any parameter is None, the corresponding filtering step will not be carried out. 
+    If any mitochondrial filtering parameter is None, the corresponding filtering step will not be carried out. 
 
     Attributes:
         min_n_genes_percentile: 
@@ -338,6 +338,8 @@ class FilteringParameters:
             Cells with fewer UMI counts than this percentile are removed.
         max_n_MADs:
             Cells with mitochondrial percentages greater than (median + this many MADs) are removed.
+        max_mito_percentage:
+            Cells with mitochondrial percentages greater than this are removed.
         expected_doublet_percentage:
             Fraction of cells expected to be doublets, used by Scrublet. 
             See the sequencing device manufacturer’s recommendations.
@@ -1053,7 +1055,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         use_ensembl_ids = True
         mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
         for data_dir in RAW_DATA_DIRS:
-            preprocess_data(data_dir, mode, use_ensembl_ids=use_ensembl_ids, save_output=True, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0, max_n_MADs=None, max_mito_percentage=0.15))
+            preprocess_data(data_dir, mode, use_ensembl_ids=use_ensembl_ids, save_output=True, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0, max_n_MADs=1, max_mito_percentage=None))
         annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensembl_ids, os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), model="cellassign", verbose=True, save_output=True)
         output_path_list = aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), save_output=True, verbose=True)
         output_path_list = correct_batch_effects(output_path_list[0], max_considered_genes="all", save_output=True, verbose=True)
