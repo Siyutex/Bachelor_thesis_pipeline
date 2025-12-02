@@ -2,5 +2,4 @@ Data/
 my_scvi_model/
 my_scanvi_model/
 my_cellassign_model/
-my_scvi_model_RUN3/
-my_scanvi_model_RUN3/
+pretrained_scMF_model/

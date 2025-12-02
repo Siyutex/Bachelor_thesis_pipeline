@@ -726,6 +726,76 @@ def infer_CNVs(
 
     return output_file_list
 
+
+def run_scMF(
+        input_data_file: str,
+        layer: str = "X",
+        cell_type = None,
+        save_output: bool = False,
+        input_prefix: str = "reduced",
+        output_prefix: str = "scMF",
+        verbose: bool = False) -> list[str]:
+    
+    """
+    Run scMalignantFinder on the spcified layer in an h5ad file. 
+    The script can also isolate ductal cells first, if specified.
+
+    Input should be an h5ad file. Should be batch corrected.
+
+    Requires the following annotations to be present:
+        - if adata.var_names ) ensembl IDs, adata.var["gene_symbols"]
+        - if layer is passed and != "X", adata.layers[layer] / adata.obsm[layer]
+        - if cell_type is passed, adata.obs["cell_type"] (from cell_type_annotation.py)
+
+    Outputs a gzip compressed h5ad file with malignancy state and malignancy probability annotations.
+    Output files are named {output_prefix}_{basename}{suffix}.h5ad.
+    where suffix is "_{cell_type}" if cell_type is passed
+
+    Annotations added to adata.obs: [str:"cancer_state_inferred_scMF", numpy.float64: "malignancy_probability_scMF"] (whether a cell is cancerous or non_cancerous, probability a cell is cancerous)
+
+    Parameters:
+        input_data_file (str): path to aggregated / batch corrected h5ad file.
+        layer (str, optional): layer / obsm matrix to run scMalignantFinder on. Defaults to "X", meaning adata.X will be used.
+        cell_type (str, optional): cell type (from adata.obs["cell_type"]) to infer CNVs for. Defaults to none, meaning cnvs are inferred for all cells.
+        save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/CNV. Defaults to False.
+        input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "batch_corrected".
+        output_prefix (str, optional): prefix for output file names. Defaults to "scMF".
+        verbose (bool, optional): whether to print verbose output from subprocess. Defaults to False.
+
+    Returns:
+        list[str]: list of paths to output files
+    """
+
+    #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
+    os.makedirs(os.path.join(OUTPUT_STORAGE_DIR, "scMF"), exist_ok=True)
+    os.makedirs(os.path.join(TEMP_DIR, "scMF"), exist_ok=True)
+
+    # assign directories for temporary and permanent storage
+    output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "scMF")
+    output_temp_dir = os.path.join(TEMP_DIR, "scMF")
+
+    # assign output file list
+    output_file_list = []
+
+    # run script and assign path to temporary output file
+    print(f"Running scMF on {input_data_file}")
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "sc_malignant_finder.py"), input_data_file, output_temp_dir, [layer, cell_type, verbose])
+
+    # rename output file
+    os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}{"_" + cell_type if cell_type and (cell_type not in os.path.basename(input_data_file)) else ""}.h5ad"))
+    temp_output_path = os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_").removesuffix(".h5ad")}{"_" + cell_type if cell_type and (cell_type not in os.path.basename(input_data_file)) else ""}.h5ad")
+
+    # add output file to output_file_list
+    output_file_list.append(temp_output_path)
+
+    # if specified, permanently store a copy of the temporary output file
+    if save_output == True:
+        print(f"Saving {temp_output_path} to {output_storage_dir}")
+        shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
+
+    return output_file_list
+
+
 def get_phylogenetic_tree(
         input_data_file: str, 
         cnv_score_matrix: str,
@@ -1079,8 +1149,9 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         for projection in ["UMAP", "PCA"]:
             cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection=projection, output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
         """
+        # run_scMF(input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), layer="X_scANVI_corrected", cell_type="ductal_cell", save_output=True, verbose=True)
+        cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "scMF", "scMF_reduced_PDAC_ductal_cell_ductal_cell.h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_scMF"], layers=["X_scANVI_corrected", "X_scANVI_corrected_cnv"], save_output=True)
 
-        cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "RUN3.6", "isolated", "isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_clade", "cnv_score"], layers=["log1p"], projection="UMAP", show=True, save_output=True)
 
         purge_tempfiles()
         sys.exit(0)

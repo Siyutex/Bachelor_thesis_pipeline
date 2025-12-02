@@ -41,3 +41,12 @@ phylogenetic_tree
 GRN_inference:
 !!IMPORTANT!! in arboreto version 0.1.6 there is an issue in core.create_graph: "from_delayed" triggers twice, so comment out / make conditional the second trigger manually
 if this is not done, then the second run will produce no delayed objects and the dask graph cannot be computed -> inference will throw an error
+
+scMF:
+!!IMPORTANT!! in scMalignantFinder 1.1.7, it is assumed in "classifier.py" that self.test_adata.X is a scipy sparse matrix that has the attribute ".todense()", which is not necessarily the case)
+SOLUTION: replace the original code in the if statement in line 238 with this (works even if X is not a scipy sparse matrix):
+
+            feature_adata = self.test_adata[:,self.features]
+            X = feature_adata.X.toarray() if hasattr(feature_adata.X, "toarray") else np.asarray(feature_adata.test_adata)
+            y_pred = self.core_model.predict(X)
+            y_prob = self.core_model.predict_proba(X)[:, 1]
