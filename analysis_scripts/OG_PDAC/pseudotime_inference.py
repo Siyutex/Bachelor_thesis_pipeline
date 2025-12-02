@@ -141,8 +141,8 @@ def return_smoothed_expression(adata, flavor, layer):
     # define window size as franction of cells (amount of discrete values in pseudotime space)
     if adata.n_obs < 1000:
         warnings.warn("Less than 1000 cells in dataset, smoothing may be locally biased")
-    window_size = int(max(100, 0.1 * adata.n_obs)) # define window size as fraction of cells and make sure its an integer value
-    print(f"using window size: {window_size}")
+    window_size = int(0.05 * adata.n_obs) # define window size as fraction of cells and make sure its an integer value
+    vprint(f"Adata had {adata.n_obs} cells, using window size: {window_size}")
 
     # order cells by pseudotime
     order = np.argsort(adata.obs[f"{flavor}_pseudotime"])

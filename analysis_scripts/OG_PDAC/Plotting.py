@@ -220,7 +220,7 @@ def plot_projection_and_DEGs(adata, layer):
     # create a figure with one plot per color, save to temp, show if show is True
     if projection == "UMAP":
         vprint("computing UMAP embedding...")
-        sc.tl.umap(internal_adata, 0.15) # uses neighbor graph # default value for mindist is actually 0.5 acoording to the docs, not 0.1 (0.2 yielded best seperation of cancer / non cancer)
+        sc.tl.umap(internal_adata, 1) # uses neighbor graph # default value for mindist is actually 0.5 acoording to the docs, not 0.1 (0.2 yielded best seperation of cancer / non cancer)
         sc.pl.umap(internal_adata, color=colored_by, show=False, ncols=n_cols, legend_loc="on data")
 
         # highlight root cell

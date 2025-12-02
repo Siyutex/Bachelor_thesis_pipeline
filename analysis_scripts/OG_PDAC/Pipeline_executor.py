@@ -332,25 +332,25 @@ class FilteringParameters:
     Attributes:
         min_n_genes_percentile: 
             Cells with fewer expressed genes than this percentile are removed.
-        min_n_cells_percentage: 
+        min_n_cells_percentage (float): 
             Genes expressed in fewer than this fraction of cells are removed.
         min_n_UMIs_percentile:
             Cells with fewer UMI counts than this percentile are removed.
         max_n_MADs:
             Cells with mitochondrial percentages greater than (median + this many MADs) are removed.
-        max_mito_percentage:
+        max_mito_percentage (float):
             Cells with mitochondrial percentages greater than this are removed.
         expected_doublet_percentage:
             Fraction of cells expected to be doublets, used by Scrublet. 
             See the sequencing device manufacturer’s recommendations.
     """
 
-    # default values chosen based on manual inspection of plots of OG_PDAC data from https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE212966#:~:text=Summary%20Pancreatic%20ductal%20adenocarcinoma%20,plot%20to%20predict%20the%20overall
+    # most default values chosen based on manual inspection of plots of OG_PDAC data from https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE212966#:~:text=Summary%20Pancreatic%20ductal%20adenocarcinoma%20,plot%20to%20predict%20the%20overall
     min_n_genes_percentile: int = 10
     min_n_cells_percentage: float = 0.01
     min_n_UMIs_percentile: int = 10
     max_n_MADs: int = None
-    max_mito_percentage: float = 0.15
+    max_mito_percentage: float = 0.10 # default value chosen according to https://pmc.ncbi.nlm.nih.gov/articles/PMC8599307/?utm_source=chatgpt.com
     expected_doublet_percentage: float = 0.024
 
 def preprocess_data(
@@ -804,7 +804,7 @@ def get_phylogenetic_tree(
         grouping_metric: str = "cancer_state_inferred",
         transition_entropy_threshold: float = 0.8,
         save_output: bool = False,
-        input_prefix: str = "reduced",
+        input_prefix: str = "scMF",
         output_prefix: str = "transition_clades",
         verbose: bool = False) -> list[str]:
     
@@ -956,7 +956,7 @@ def infer_pseudotime(
         layer: str = "log1p",
         smoothe_expression: bool = True,
         save_output: bool = False,
-        input_prefix: str = "CNV_inferred",
+        input_prefix: str = "isolated",
         output_prefix: str = "pseudotime_inferred",
         verbose: bool = False) -> list[str]:
     """ 
@@ -973,7 +973,7 @@ def infer_pseudotime(
     Output files are named {output_prefix}_{basename}.h5ad.
 
     Annotations added to adata.obs: 
-        - if flavor == "dpt", adata.obs['pseudotime']: pandas.Series (dtype float) (pseudotime value for each cell)
+        - if flavor == "dpt", adata.obs['dpt_pseudotime']: pandas.Series (dtype float) (pseudotime value for each cell)
         - if flavor == "monocle", adata.obs['monocle_pseudotime']: pandas.Series (dtype float) (pseudotime value for each cell)
         
     Parameters:
@@ -1108,19 +1108,6 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
     # --- main loop ---
 
     try:
-        # RUN 3 artifacts
-            #mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
-            # temp_output_files = preprocess_data(RAW_DATA_DIRS[0], mode, use_ensembl_ids=use_ensebml_ids, save_output=False, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0))
-            # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensebml_ids, r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\marker_genes.json", r"C:\Users\Julian\Documents\not_synced\Github\Bachelor_thesis_pipeline\auxiliary_data\annotations\negative_markers.json", model="cellassign", verbose=True, save_output=True)
-            # output_path_list = aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), save_output=True, verbose=True)
-
-            # isolate_and_HVGs(input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree": ["transitional"]}, save_output=True)
-            # infer_pseudotime(input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", origin_clade=28, flavor="monocle", save_output=True, input_prefix="isolated", smoothe_expression=True, layer="log1p")
-            # cluster_and_plot(["gene_expression_vs_obs"], input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime/pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", x_axis="monocle_pseudotime", genes=["SAMD11", "PLEKHN1", "RNF223", "C1orf159"], show=True, save_output=True, layers=["log1p"])
-
-            #cluster_and_plot(["projections"], input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime/pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade", "monocle_pseudotime"], layers=["log1p"], projection="UMAP", save_output=True)
-            #cluster_and_plot(["projections"], input_data_file=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime/pseudotime_inferred_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad", obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade", "monocle_pseudotime"], layers=["log1p"], projection="PCA", save_output=True)
-
         # RUN 3.5 / 3.6 full run pipeline (3.6 used mean + 1MAD for mito fitlering, 3.5 used 15% mito expression cutoff)
         r"""use_ensembl_ids = True
         mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
@@ -1149,8 +1136,11 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         for projection in ["UMAP", "PCA"]:
             cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection=projection, output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
         """
-        # run_scMF(input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_PDAC_ductal_cell.h5ad"), layer="X_scANVI_corrected", cell_type="ductal_cell", save_output=True, verbose=True)
-        cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "scMF", "scMF_reduced_PDAC_ductal_cell_ductal_cell.h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_scMF"], layers=["X_scANVI_corrected", "X_scANVI_corrected_cnv"], save_output=True)
+
+        # RUN3.6:
+        # = RUN3.5 until reduced, then we ran scMF, then tree with grouping metric = cancer_state_inferred_scMF, then continue normally
+
+
 
 
         purge_tempfiles()

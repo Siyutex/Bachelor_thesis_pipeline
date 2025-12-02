@@ -153,14 +153,18 @@ def main(input_data_file_or_dir,
 
     print("reading input data...")
     adata = read_input_data(input_data_type, input_data_file_or_dir, var_names)
-
     print(f"{adata.shape[0]} cells and {adata.shape[1]} genes present before filtering")
+    current_n_cells = adata.shape[0]
+
     print("filtering cells and genes...")
     filter_cells_genes(adata, min_n_genes_percentile, min_n_cells_percentage) # modifies adata inplace, no new assignment needed
+    vprint(f"removed {current_n_cells - adata.shape[0]} cells")
+    current_n_cells = adata.shape[0]
 
     print("filtering cells with low UMI counts...")
     adata = filter_UMI_counts(adata, min_n_UMIs_percentile) # this and all following function do NOT MODIFY INPLACE, assign new adata for each
-
+    vprint(f"removed {current_n_cells - adata.shape[0]} cells")
+    current_n_cells = adata.shape[0]
 
     if max_n_MADs != None:
         print(f"filtering out cells with high mitochondrial gene expression > median + {max_n_MADs} MADs...")
@@ -170,9 +174,13 @@ def main(input_data_file_or_dir,
         adata = filter_mito_percent(adata, max_mito_percentage, var_names=var_names)
     else:
         print("No mitochondrial filtering applied")
+    vprint(f"removed {current_n_cells - adata.shape[0]} cells")
+    current_n_cells = adata.shape[0]
 
     print("removing doublets...")
     adata = filter_doublets(adata, expected_doublet_percentage)
+    vprint(f"removed {current_n_cells - adata.shape[0]} cells")
+    current_n_cells = adata.shape[0]
 
     print("validating data...")
     validate_data(adata, max_mito_percentage)

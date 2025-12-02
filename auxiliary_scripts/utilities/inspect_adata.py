@@ -35,12 +35,12 @@ if __name__ == "__main__":
 
     layer_to_check = None # check library sizes for this layer
     file_locations = [
-        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/scMF/scMF_PDAC_ductal_cell.h5ad",
+        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad",
     ]
 
     for path in file_locations:
         adata = sc.read_h5ad(path)
-        for extract in ["cancer_state_inferred_scMF", "malignancy_probability_scMF"]:
+        for extract in ["cnv_clade"]:
             show_annotation(adata, extract)
 
 
