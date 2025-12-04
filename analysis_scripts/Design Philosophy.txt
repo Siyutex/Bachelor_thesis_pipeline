@@ -22,6 +22,7 @@ General design:
 	- keep a requirements.txt in the repo, keep it updated, and ideally use a venv (eg miniconda3)
 	- NEVER TRUST LIBRARY DEFAULT PARAMETERS, always read the docs and understand what parameters docs
 	  (e.g. default library size = 1 in scvitools get_normalized_expression is very very bad for downstream analysis)
+	- every datapoint gets a unique (across entire used dataset), traceable ID before any processing step 
 
 For future projects:
 - at the very beginning, run a script to standardize raw data format

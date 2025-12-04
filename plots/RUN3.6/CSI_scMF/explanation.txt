@@ -2,3 +2,6 @@ we see that the nc cells are much more localised which is good and points at con
 also get a uniform start clade (23), now we just need a bit more cells which we weill do by
 - preprecessing with mito > 10% is gone (according to QC paper I found)
 - keep 1 or 2 c and nc clades for start and end of pseudotime validation
+
+(scMF ran on reduced dataset, so post cnv, tree still built from cnv matrix, but with groupong 
+matric = csi_scMF)

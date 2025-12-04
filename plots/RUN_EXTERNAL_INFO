@@ -1,0 +1,4 @@
+- cell ids (obs_names) are consistent across RUNs (I tested this with compare_present_cell.py)
+    -> I can compare what cells are labelled as transitional by obs_names
+
+- there are only 61 cells which are consistently labelled as transitional acress RUNS 3.5, 3,6, 4 (also checked with compare_present_cells.py)

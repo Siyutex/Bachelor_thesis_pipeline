@@ -59,6 +59,7 @@ class pipeline_mode(Enum):
     MTX_TSVs_in_subfolders = 1  #10x genomics, format
     compressed_MTX_TSVs_in_subfolders = 2 #GDC format
     dot_matrix_files = 3 #cancerSCEM format
+    h5ad_files = 4
     NO_MODE_CHOSEN = None
 
 # functions
@@ -81,8 +82,8 @@ def choose_pipeline_mode(raw_data_dir):
     elif any(file.endswith("counts.matrix.tsv.gz") for file in os.listdir(raw_data_dir)):
         # if the RAW_DATA_DIR directly contains .matrix files (cancerSCEM format)
         mode = pipeline_mode.dot_matrix_files
-
-
+    elif any(file.endswith(".h5ad") for file in os.listdir(raw_data_dir)):
+        mode = pipeline_mode.h5ad_files
 
     if mode == pipeline_mode.NO_MODE_CHOSEN:
         raise ValueError("Could not determine pipeline mode. Please check the structure of the provided RAW_DATA_DIR. It should either contain subdirectories with mtx and tsv files (10x genomics format), subdirectories with compressed mtx and tsv files (GDC format) or directly .matrix files (cancerSCEM format).")
@@ -1108,17 +1109,18 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
     # --- main loop ---
 
     try:
-        # RUN 3.5 / 3.6 full run pipeline (3.6 used mean + 1MAD for mito fitlering, 3.5 used 15% mito expression cutoff)
+        # full pipeline run (adjust parameters as needed)
         r"""use_ensembl_ids = True
         mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
         for data_dir in RAW_DATA_DIRS:
-            preprocess_data(data_dir, mode, use_ensembl_ids=use_ensembl_ids, save_output=True, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0, max_n_MADs=1, max_mito_percentage=None))
+            preprocess_data(data_dir, mode, use_ensembl_ids=use_ensembl_ids, save_output=True, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0, max_n_MADs=None, max_mito_percentage=0.10))
         annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensembl_ids, os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), model="cellassign", verbose=True, save_output=True)
         output_path_list = aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), save_output=True, verbose=True)
         output_path_list = correct_batch_effects(output_path_list[0], max_considered_genes="all", save_output=True, verbose=True)
         output_path_list = infer_CNVs(output_path_list[0], corrected_representation="X_scANVI_corrected", reference_genome_path=os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), cell_type="ductal_cell", save_output=True, verbose=True)
         output_path_list = reduce_data(output_path_list[0], input_prefix="CNV_inferred", layers_to_remove=["X", "X_scANVI_corrected_gene_values_cnv", "X_scVI_corrected"], save_output=True, verbose=True)
-        output_path_list = get_phylogenetic_tree(output_path_list[0], cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state_inferred", transition_entropy_threshold=0.8, save_output=True, verbose=True)
+        output_path_list = run_scMF(output_path_list[0], layer="X_scANVI_corrected", save_output=True, verbose=True)
+        output_path_list = get_phylogenetic_tree(output_path_list[0], cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state_inferred_scMF", transition_entropy_threshold=0.8, save_output=True, verbose=True)
         tree_file = None
         h5ad_file = None
         for file in output_path_list:
@@ -1128,7 +1130,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
                 h5ad_file = file
         #plots for cnv cluster validation
         for projection in ["UMAP", "PCA"]:
-            cluster_and_plot(["projections"], input_data_file=h5ad_file, obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["X_scANVI_corrected_cnv"], projection=projection, output_storage_subdir="CNV_matrix_check", save_output=True, verbose=True, show=False)                
+            cluster_and_plot(["projections"], input_data_file=h5ad_file, obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_scMF", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["X_scANVI_corrected_cnv"], projection=projection, output_storage_subdir="CNV_matrix_check", save_output=True, verbose=True, show=False)                
         # tree plot (CANNOT RUN ON CLUSTER, BCS PLOTLY NEEDS MANUAL SAVING)
         # cluster_and_plot(["phylogenetic_tree"], input_data_file=h5ad_file, tree_file=tree_file, output_storage_subdir="tree", save_output=True, verbose=True, show=False)
         output_path_list = isolate_and_HVGs(h5ad_file, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, save_output=True, verbose=True)
@@ -1136,9 +1138,6 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         for projection in ["UMAP", "PCA"]:
             cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection=projection, output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
         """
-
-        # RUN3.6:
-        # = RUN3.5 until reduced, then we ran scMF, then tree with grouping metric = cancer_state_inferred_scMF, then continue normally
 
 
 

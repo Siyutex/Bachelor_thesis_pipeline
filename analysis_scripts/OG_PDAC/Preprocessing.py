@@ -21,12 +21,12 @@ def read_input_data(input_data_type, input_data_path, var_names):
     if input_data_type == "MTX_TSVs_in_subfolders":
         # Directly read 10X-formatted data (uncompressed)
         return sc.read_10x_mtx(input_data_path, var_names=var_names)
-
     elif input_data_type == "compressed_MTX_TSVs_in_subfolders":
         return _read_compressed_10x(input_data_path, var_names)
-
     elif input_data_type == "dot_matrix_files":
         return _read_dot_matrix(input_data_path, var_names)
+    elif input_data_type == "h5ad_files":
+        return sc.read_h5ad(input_data_path) # should already have desired varnames (gene_ids / gene_symbols)
 
     else:
         raise ValueError(f"Unsupported input_data_type: {input_data_type}")
@@ -114,10 +114,12 @@ def filter_mito_percent(adata, percent_mito_cutoff, var_names) -> sc.AnnData:
 
 
 def filter_doublets(adata, expected_doublet_percentage) -> sc.AnnData:
+    # create internal adata to make sure scrublet preprocessing does not affect the original adata
+    internal_adata = adata.copy()
 
-    # remove doublets using scrublet
-    sc.pp.scrublet(adata, expected_doublet_rate=expected_doublet_percentage, verbose=verbose) # boolean prediction in .obs['predicted_doublet']
-    new_adata = adata[~adata.obs['predicted_doublet']] # ~ is a bitwise NOT operator, so we keep all cells where predicted_doublet == False
+    # remove doublets using scrublet 
+    sc.pp.scrublet(internal_adata, expected_doublet_rate=expected_doublet_percentage, verbose=verbose) # boolean prediction in .obs['predicted_doublet']
+    new_adata = adata[~internal_adata.obs['predicted_doublet']] # ~ is a bitwise NOT operator, so we keep all cells where predicted_doublet == False, use internal adata only for boolean mask, so if srublet applied changes to X, they are not carried over to the returned value
 
     return new_adata
 
