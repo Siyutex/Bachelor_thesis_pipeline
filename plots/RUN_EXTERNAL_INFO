@@ -18,5 +18,10 @@ reduced adatas (X_scANVI_corrected) (3.5 3.6 4.0):
 -> must happen in batch correction
 
 
-## DOES STEP X PRODUCE CONSISTENT RESULTS? ## (with consistent input and hyperparameters)
-- preprprocessing.py: 
+## DOES STEP X PRODUCE CONSISTENT RESULTS? ## 
+(UNDER THE CONDITION THAT INPUT AND HYPERPARAMETERS ARE CONSITENT!)
+
++ preprocessing.py: 
+    -> passes assert_cell_ids_match -> consistently isolates the same cells across runs
+
+- Cell_type_annotation.py:

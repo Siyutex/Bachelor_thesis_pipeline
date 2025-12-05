@@ -25,7 +25,7 @@ def load_obsname_dict(file_list: list[str]):
     return obsname_dict
 
 
-def check_label_overlap(obsname_dict: dict[str, list[str]]):
+def check_label_overlap(obsname_dict: dict[str, list[str]], verbose: bool = False):
     """
     Throws an error, if any one list contains duplicates
 
@@ -37,8 +37,11 @@ def check_label_overlap(obsname_dict: dict[str, list[str]]):
 
     amount of labels present in > 1 file [1,2,3,4] [4,5,6] [3,4,5] -> [3,4,5] -> 3
     percentage of labels present in > 1 file of unique labels -> 3/6 = 0.5
-    """
 
+    Returns:
+    percentage of cell_ids / labels shared across all files
+    """
+    vprint = hf.make_vprint(verbose)
 
 
     # check if there are duplicates within each list, if so throw error
@@ -46,7 +49,7 @@ def check_label_overlap(obsname_dict: dict[str, list[str]]):
         for filepath, obs_names in obsname_dict.items():
             if len(obs_names) != len(set(obs_names)):
                 raise ValueError(f"Duplicate labels found in obs_names of {filepath}")
-        print("No duplicates found in within each file.")
+        vprint("No duplicates found in within each file.")
 
     # return amount of all labels across all files
     def get_total_labels(obsname_dict: dict[str, list[str]]):
@@ -79,11 +82,13 @@ def check_label_overlap(obsname_dict: dict[str, list[str]]):
     duplicates = get_duplicates(obsname_dict)
 
 
-    print(f"Total labels: {total_labels_count}")
-    print(f"Labels shared across all files: {shared_labels_count}")
-    print(f"Percentage of shared labels: {shared_labels_count / total_labels_count:.2f}")
-    print(f"Labels present in > 1 file: {len(duplicates)}")
-    print(f"Percentage of labels present in > 1 file: {len(duplicates) / total_labels_count:.3f}")
+    vprint(f"Total labels: {total_labels_count}")
+    vprint(f"Labels shared across all files: {shared_labels_count}")
+    vprint(f"Percentage of shared labels: {shared_labels_count / total_labels_count:.2f}")
+    vprint(f"Labels present in > 1 file: {len(duplicates)}")
+    vprint(f"Percentage of labels present in > 1 file: {len(duplicates) / total_labels_count:.3f}")
+
+    return shared_labels_count / total_labels_count
 
 
 def get_differently_named_cells(h5ad_files: list[str]):
@@ -176,20 +181,65 @@ def get_cells_with_diff_expr(file_list: list[str], layer):
     print(f"Amount of cells that have different expression in different adatas: {len(inconsistent)}")
 
 
+def assert_cell_ids_match(dir: str, n_outputs: int = 1, file_name: str = None):
+    """
+    Assert that all files in a directory sharing the same base `file_name` contain
+    identical cell IDs.
+
+    This is useful when a pipeline step produces multiple outputs and you want to
+    ensure that corresponding files across runs align (e.g., `run0_*` vs `run1_*`).
+
+    Examples
+    --------
+    If `file_name="PDAC_cancerous"` and the directory contains:
+
+        run0_PDAC_cancerous_1.h5ad
+        run1_PDAC_cancerous_1.h5ad
+        run0_PDAC_cancerous_2.h5ad
+        run1_PDAC_cancerous_2.h5ad
+
+    then the function checks that:
+    - `run0_PDAC_cancerous_1` has the same cell IDs as `run1_PDAC_cancerous_1`
+    - `run0_PDAC_cancerous_2` has the same cell IDs as `run1_PDAC_cancerous_2`
+    and so on.
+
+    If `file_name` is omitted, the function asserts that *all* files in the
+    directory share the same cell IDs. This is useful when the pipeline step
+    produces only a single output file per run.
+
+    Parameters
+    ----------
+    dir : str
+        Directory containing the files to compare.
+    n_outputs : int, optional
+        Number of output files produced per pipeline run. Default is 1.
+    file_name : str, optional
+        Common name prefix of the files to compare. Assumes file structure of the
+        form ``{file_name}_{index}``. For each index, all runs are compared:
+        e.g., ``run0_A_1`` vs ``run1_A_1`` vs ``run2_A_1``, etc.
+    """
+
+
+    # create list of all files in directory
+    file_list = [os.path.join(dir, file) for file in os.listdir(dir)]
+
+
+    if file_name != None: # if file_name is given, compare 
+        for dataset in range(n_outputs):
+            local_file_list = [file for file in file_list if f"{file_name}_{dataset}" in os.path.basename(file)]
+            obs_name_dict = load_obsname_dict(local_file_list)
+            overlap_percentage = check_label_overlap(obs_name_dict)
+            assert overlap_percentage == 1
+            print(f"Check passed for {file_name}_{dataset}, cell IDs match across all runs.")
+    else:
+        obs_name_dict = load_obsname_dict(file_list)
+        overlap_percentage = check_label_overlap(obs_name_dict, verbose=False)
+        assert overlap_percentage == 1
+        print("Check passed, cell IDs match across all files.")
+
 if __name__ == "__main__":
 
-    """dir_list = [
-        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/aggregated",
-    ]
-    file_list = [os.path.join(dir, file) for dir in dir_list for file in os.listdir(dir)]"""
-
-    file_list = [
-        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/RUN3.5/reduced/reduced_PDAC_ductal_cell.h5ad",
-        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/RUN3.6/reduced/reduced_PDAC_ductal_cell.h5ad",
-        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/RUN4/reduced/reduced_PDAC_ductal_cell.h5ad",
-    ]
-
-    get_cells_with_diff_expr(file_list, "X_scANVI_corrected")
+    assert_cell_ids_match(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/preprocessed", n_outputs=6, file_name="PDAC_cancerous")
 
 
     # RESULT: (from 3 aggregated files with slightly different preprocessing paramters, which I thought changes cell order -> changes assigned names in concatenation)
