@@ -50,3 +50,16 @@ SOLUTION: replace the original code in the if statement in line 238 with this (w
             X = feature_adata.X.toarray() if hasattr(feature_adata.X, "toarray") else np.asarray(feature_adata.test_adata)
             y_pred = self.core_model.predict(X)
             y_prob = self.core_model.predict_proba(X)[:, 1]
+
+
+
+Hyperparameter choices (for reproducibility):
+Preprocessing: 
+  - min_n_genes_percentile: int = 10 # manual inspection of distribution
+  - min_n_cells_percentage=0, # so cnv inference has all genes
+  - min_n_UMIs_percentile: int = 10 # manual inspection of distribution
+  - max_n_MADs=None, 
+  - max_mito_percentage=0.10, # bcs recommended in https://pmc.ncbi.nlm.nih.gov/articles/PMC8599307/?utm_source=chatgpt.com
+  - expected_doublet_percentage: float = 0.024 # recommended by 10x genomics website for the amount of cells used in https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE212966#:~:text=Summary%20Pancreatic%20ductal%20adenocarcinoma%20,plot%20to%20predict%20the%20overall
+
+Cell Type annotation:

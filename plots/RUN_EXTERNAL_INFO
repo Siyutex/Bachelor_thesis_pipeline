@@ -2,3 +2,21 @@
     -> I can compare what cells are labelled as transitional by obs_names
 
 - there are only 61 cells which are consistently labelled as transitional acress RUNS 3.5, 3,6, 4 (also checked with compare_present_cells.py)
+
+## cells with different expression across runs? ##
+reduced adatas (X_scANVi_corrected_cnv) (3.5 3.6 4.0):
+2467 cells with different expression in diff adatas 
+
+aggregated with slightly diff mito cutoff:
+0 cells with diff expr in diff adatas 
+-> issue must happen after aggregation
+
+reduced adatas (X_scANVI_corrected) (3.5 3.6 4.0):
+2467 
+-> same as cnv, so cnv algorithm must work deterministically -> must happen before cnv
+
+-> must happen in batch correction
+
+
+## DOES STEP X PRODUCE CONSISTENT RESULTS? ## (with consistent input and hyperparameters)
+- preprprocessing.py: 

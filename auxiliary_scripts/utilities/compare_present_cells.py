@@ -5,6 +5,10 @@ import scanpy as sc
 import helper_functions as hf
 import os
 from collections import Counter
+from scipy import sparse
+import numpy as np
+from collections import defaultdict
+import hashlib
 
 
 def load_obsname_dict(file_list: list[str]):
@@ -94,11 +98,12 @@ def get_differently_named_cells(h5ad_files: list[str]):
     -> the cell [1,2,3,4,5,6] occurs under 2 names
     """
     
-    from collections import defaultdict
     expr_to_names = defaultdict(set)
 
     for adata_file in h5ad_files:   # adata_files = list of paths to MTX/h5ad files
         adata = sc.read_h5ad(adata_file)  # load one AnnData at a time
+        print(f"loaded {adata_file}")
+        print(f"number of cells: {adata.n_obs}")
         
         for cell_id, vec in zip(adata.obs_names, adata.X): # for loop over 2d array loops over 1 row at a time -> zip gives tuple of cell id and its expression vector
             # Convert sparse row to dense
@@ -113,20 +118,78 @@ def get_differently_named_cells(h5ad_files: list[str]):
     inconsistent = {k: names for k, names in expr_to_names.items() if len(names) > 1}
 
     print(f"Amount of cells that exist under different names in different adatas: {len(inconsistent)}")
+    print(f"Lenght of expr_to_names: {len(expr_to_names)}")
+
+    import json
+    export_dict = {str(key): value for key, value in expr_to_names.items()}
+
+    with open("differently_named_cells.json", "w") as f:
+        json.dump(export_dict, f, indent=4)
+
+
+def get_cells_with_diff_expr(file_list: list[str], layer):
+    """
+    check if any cells, identified by their cell id, occur under different expression vectors in different adatas (RUNs)
+    eg cell a might be (1,2,3,4) in run 1 and (4,3,2,1) in run 2, which should not happen and indicates issues with the pipeline (a cell should always be identical to itself, regardless of processing)
+    """
+
+
+    name_to_vec = defaultdict(set)
+    inconsistent = {}
+
+    for file in file_list:
+        adata = sc.read_h5ad(file)
+        extracted_adata = hf.matrix_to_anndata(adata, layer).copy()
+        del adata
+
+        # use csr matrix to save memory (matrix_to_anndata likely outputs np.ndarray for adata.X)
+        if type (extracted_adata.X) != sparse.csr_matrix:
+            print(f"Type of adata.X: {type(extracted_adata.X)}, converting to csr matrix")
+            extracted_adata.X = sparse.csr_matrix(extracted_adata.X)
+
+        for cell_id, vec in zip(extracted_adata.obs_names, extracted_adata.X):
+
+            # turn cell id to string so its hashable
+            cell_id = str(cell_id) 
+
+            # Convert sparse row to dense and ravel (to make it 1D)
+            if hasattr(vec, "toarray") and sparse.issparse(vec):
+                vec = vec.toarray().ravel()
+            elif type(vec) == np.ndarray:
+                vec = vec.ravel()
+            assert type(vec) == np.ndarray
+
+            # convert vec to bytes to save memory, then hash to save even more memory
+            vec_bytes = vec.tobytes()
+            vec_hash = hashlib.sha256(vec_bytes).digest()
+
+            if cell_id not in inconsistent.keys(): # if we already know the cell has diff expr vecs, no need to add it
+                name_to_vec[cell_id].add(vec_hash)
+
+            # check if the current cell_id has > 1  unique expression vector
+            if len(name_to_vec[cell_id]) > 1:
+                inconsistent[cell_id] = True # inconsistent will only have keys for inconsistent cells, all with value True
+                del name_to_vec[cell_id] # delete key from dict to save memory
+
+        del extracted_adata
+
+    print(f"Amount of cells that have different expression in different adatas: {len(inconsistent)}")
 
 
 if __name__ == "__main__":
 
+    """dir_list = [
+        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/aggregated",
+    ]
+    file_list = [os.path.join(dir, file) for dir in dir_list for file in os.listdir(dir)]"""
+
     file_list = [
-        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/isoltated_test0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad",
-        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/isoltated_test1_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad",
-        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/RUN4/isolated/isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad",
+        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/RUN3.5/reduced/reduced_PDAC_ductal_cell.h5ad",
+        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/RUN3.6/reduced/reduced_PDAC_ductal_cell.h5ad",
+        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/RUN4/reduced/reduced_PDAC_ductal_cell.h5ad",
     ]
 
-    print("Getting obs names")
-    obsname_dict = load_obsname_dict(file_list)
-    print("Checking label overlap...")
-    check_label_overlap(obsname_dict)
+    get_cells_with_diff_expr(file_list, "X_scANVI_corrected")
 
 
     # RESULT: (from 3 aggregated files with slightly different preprocessing paramters, which I thought changes cell order -> changes assigned names in concatenation)
