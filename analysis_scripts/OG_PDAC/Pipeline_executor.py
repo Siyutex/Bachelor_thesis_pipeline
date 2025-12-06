@@ -1139,11 +1139,11 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection=projection, output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
         """
 
-        for run in range(2):
+        for run in range(3):
             use_ensembl_ids = True
-            mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
-            preprocess_data(RAW_DATA_DIRS[0], mode, use_ensembl_ids=use_ensembl_ids, save_output=True, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0, max_n_MADs=None, max_mito_percentage=0.10), output_prefix=f"run_{run+1}")
-
+            # mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
+            # preprocess_data(RAW_DATA_DIRS[0], mode, use_ensembl_ids=use_ensembl_ids, save_output=True, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0, max_n_MADs=None, max_mito_percentage=0.10), output_prefix=f"run_{run+1}")
+            annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensembl_ids, os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), model="cellassign", verbose=True, save_output=True, input_prefix="run_0", output_prefix=f"cell_type_annotated_run_{run}")
 
 
         purge_tempfiles()

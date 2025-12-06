@@ -21,7 +21,15 @@ reduced adatas (X_scANVI_corrected) (3.5 3.6 4.0):
 ## DOES STEP X PRODUCE CONSISTENT RESULTS? ## 
 (UNDER THE CONDITION THAT INPUT AND HYPERPARAMETERS ARE CONSITENT!)
 
+checks:
+output across 3 runs needs to be like this:
+	same cell ids present in all outputs
+	same cell id needs to have same expression in all outputs for relevant layer
+	same cell id needs to have same obs annotations in all outputs
+	same gene ids present in all outputs
+	same gene id needs to have same var annotations in all outputs
+
 + preprocessing.py: 
-    -> passes assert_cell_ids_match -> consistently isolates the same cells across runs
+    -> passes all checks
 
 - Cell_type_annotation.py:
