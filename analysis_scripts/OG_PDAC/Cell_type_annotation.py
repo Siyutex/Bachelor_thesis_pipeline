@@ -95,8 +95,13 @@ def annotate_markers_z_score(adata, cutoff_unsure, cutoff_other):
     return None
 
 
-def annotate_markers_cellassign(adata, use_ensembl_ids):
-    
+def annotate_markers_cellassign(adata, use_ensembl_ids, input_data_path):
+    """
+    input_data_path needed to get basename of file for model naming
+    """
+    basename = os.path.basename(input_data_path)
+    script_dir = os.path.dirname(__file__)
+
     vprint("Creating dataframe of marker lists...")
     # first make 1 pandas series per key (cell type) in the dict, list values (marker genes) will be the indexes, values will be 1
     marker_series_dict = {key: pd.Series(data=1, index=value) for key, value in MARKER_LISTS.items()}
@@ -125,7 +130,7 @@ def annotate_markers_cellassign(adata, use_ensembl_ids):
    
     # assign a saved cellassign model if it exists
     try:
-        model = scvi.external.CellAssign.load("my_cellassign_model/", internal_adata)
+        model = scvi.external.CellAssign.load(os.path.join(script_dir, "..", "..","my_cellassign_models", basename), internal_adata)
     except Exception as e:
         print("No fitting cellassign model found. Training a new one...")
         print(f"Model loading failed because of Exception: {e}")
@@ -139,7 +144,7 @@ def annotate_markers_cellassign(adata, use_ensembl_ids):
         model = scvi.external.CellAssign(internal_adata, cell_type_markers=marker_df)
         vprint("Training model...")
         model.train()
-        model.save("my_cellassign_model/", overwrite=True)
+        model.save(os.path.join(script_dir, "..", "..","my_cellassign_models", basename), overwrite=False) # never overwrite to guarantee run consistency
 
     # predict cell types
     predictions = model.predict()
@@ -214,7 +219,7 @@ if __name__ == "__main__":
         annotate_markers_z_score(adata, cutoff_unsure, cutoff_other) # second highest score has to be lower than cutoff unsure (eg 0.8 = 80%) of highest to be sure, any score has to be at least above cutoff other (eg 0.2) stdevs below the mean for that score among all cells
     elif model == "cellassign":
         print("Annotating cell types using Cellassign...")
-        annotate_markers_cellassign(adata, use_ensembl_ids)
+        annotate_markers_cellassign(adata, use_ensembl_ids, input_data_file)
 
     print("Displaying fractions...")
     display_fractions(adata)

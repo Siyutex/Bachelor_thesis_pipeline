@@ -586,14 +586,70 @@ def assert_no_inconsistent_var_annotations(dir: str, n_outputs: int = 1, file_na
         print("Check passed, var annotations match across all files.")
 
 
+def run_all_checks(dir: str, n_outputs: int = 1, file_name: str = None, layer="X"):
+    """
+    Run alle assertion functions:
+    - assert_obsnames_match (uses passed n_outputs)
+    - assert_no_inconsistent_expression (only compares a representative sample n_outputs = 1)
+    - assert_no_inconsistent_obs_annotations (only compares a representative sample n_outputs = 1)
+    - assert_varnames_match (uses passed n_outputs)
+    - assert_no_inconsistent_var_annotations (only compares a representative sample n_outputs = 1)
+
+    If any of them fail, print a message indicating which check failed.
+
+    Parameters
+    ----------
+    dir : str
+        Directory containing the files to compare.
+    n_outputs : int, optional
+        Number of output files to compare per run. Default is 1.
+    file_name : str, optional
+        Common name prefix of the files to compare. Assumes a file structure of the
+        form ``{file_name}_{index}``. For each index (0 to ``n_outputs - 1``),
+        all runs are compared—for example: ``run0_A_0`` vs. ``run1_A_0`` vs.
+        ``run2_A_0``.
+        Set to None to compare all files in the directory (overrides n_outputs).
+    layer : str, optional
+        Layer to compare expression of, for assert_no_inconsistent_expression. Default is "X".
+    """
+
+    try:
+        assert_obsnames_match(dir, n_outputs=n_outputs, file_name=file_name)
+    except AssertionError:
+        print("\n CHECK FAILED, obs names do not match across runs. \n")
+        pass
+    try:
+        assert_no_inconsistent_expression(dir, layer=layer, n_outputs=1, file_name=file_name)
+        pass
+    except AssertionError:
+        print("\n CHECK FAILED, expression matrices do not match across runs. \n")
+        pass
+    try:
+        assert_no_inconsistent_obs_annotations(dir, n_outputs=1, file_name=file_name)
+        pass
+    except AssertionError:
+        print("\n CHECK FAILED, obs annotations do not match across runs. \n")
+        pass
+    try:
+        assert_varnames_match(dir, n_outputs=n_outputs, file_name=file_name)
+    except AssertionError:
+        print("\n CHECK FAILED, var names do not match across runs. \n")
+        pass
+    try:
+        assert_no_inconsistent_var_annotations(dir, n_outputs=1, file_name=file_name)
+    except AssertionError:
+        print("\n CHECK FAILED, var annotations do not match across runs. \n")
+        pass
+
+
 if __name__ == "__main__":
 
-    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/preprocessed"
-    assert_obsnames_match(dir, n_outputs=6, file_name="PDAC_cancerous")
-    assert_no_inconsistent_expression(dir, layer="X", n_outputs=1, file_name="PDAC_cancerous")
-    assert_no_inconsistent_obs_annotations(dir, n_outputs=1, file_name="PDAC_cancerous")
-    assert_varnames_match(dir, n_outputs=6, file_name="PDAC_cancerous")
-    assert_no_inconsistent_var_annotations(dir, n_outputs=1, file_name="PDAC_cancerous")
+    print("starting script...")
+
+    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/batch_corrected"
+    run_all_checks(dir=dir, n_outputs=1, file_name=None, layer="X_scANVI_corrected")
+
+
 
 
     # RESULT: (from 3 aggregated files with slightly different preprocessing paramters, which I thought changes cell order -> changes assigned names in concatenation)

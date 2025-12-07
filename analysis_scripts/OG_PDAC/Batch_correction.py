@@ -12,6 +12,21 @@ import scvi # needed for batch correction
 import helper_functions as hf
 import anndata
 from typing import Tuple
+import numpy as np
+import random
+import torch
+
+
+def set_scvi_seed(seed=42):
+    scvi.settings.seed = seed # uses a setter in scvi
+    # np.random.seed(seed)
+    random.seed(seed) # this is also done in scvi
+    # torch.manual_seed(seed)
+    """if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False"""
 
 
 def correct_batches_scVI(adata, max_considered_genes) -> Tuple[anndata.AnnData, scvi.model.SCVI]:
@@ -40,6 +55,8 @@ def correct_batches_scVI(adata, max_considered_genes) -> Tuple[anndata.AnnData, 
     model : scvi.model.SCVI
         The trained scVI model
     """
+    script_dir = os.path.dirname(__file__)
+
     # create internal adata with X = log normalized, without modifiying the real data
     internal_adata = adata.copy()
 
@@ -74,7 +91,7 @@ def correct_batches_scVI(adata, max_considered_genes) -> Tuple[anndata.AnnData, 
 
 
     try:
-        model = scvi.model.SCVI.load("my_scvi_model/", internal_adata)
+        model = scvi.model.SCVI.load(os.path.join(script_dir, "..", "..", "my_scvi_model"), internal_adata)
     except Exception as e:
         print("No scVI model found. Training a new one...")
         print(f"Model loading failed because of Exception: {e}")
@@ -90,7 +107,7 @@ def correct_batches_scVI(adata, max_considered_genes) -> Tuple[anndata.AnnData, 
         # Train the model
         model = scvi.model.SCVI(internal_adata)
         model.train()
-        model.save("my_scvi_model/", overwrite=True)
+        model.save(os.path.join(script_dir, "..", "..", "my_scvi_model"), overwrite=False)
 
     # Get the batch-corrected latent representation (obsm is a matrix like X where each row is a cell and each column is a feature)
     # get batch keys
@@ -120,11 +137,12 @@ def correct_batches_scANVI(adata_scvi, pretrained_scVI_model) -> Tuple[anndata.A
     model : scvi.model.SCANVI
         The trained scANVI model
     """
+    script_dir = os.path.dirname(__file__)
 
     internal_adata = adata_scvi.copy()
 
     try:
-        model = scvi.model.SCANVI.load("my_scanvi_model/", internal_adata)
+        model = scvi.model.SCANVI.load(os.path.join(script_dir, "..", "..", "my_scanvi_model"), internal_adata)
     except Exception as e:
         print("No scANVI model found. Training a new one...")
         print(f"Model loading failed because of Exception: {e}")
@@ -140,7 +158,7 @@ def correct_batches_scANVI(adata_scvi, pretrained_scVI_model) -> Tuple[anndata.A
         # Train the model
         model = scvi.model.SCANVI.from_scvi_model(scvi_model=pretrained_scVI_model, adata=internal_adata, labels_key="cell_type", unlabeled_category="unlabeled")
         model.train()
-        model.save("my_scanvi_model/", overwrite=True)
+        model.save(os.path.join(script_dir, "..", "..", "my_scanvi_model"), overwrite=False)
 
     # Get the batch-corrected latent representation (obsm is a matrix like X where each row is a cell and each column is a feature)
     # get batch keys
@@ -152,6 +170,9 @@ def correct_batches_scANVI(adata_scvi, pretrained_scVI_model) -> Tuple[anndata.A
 
 def main(input_data_file, output_dir, max_considered_genes):
     adata = sc.read_h5ad(input_data_file)
+
+    # set seed for reproducibility
+    set_scvi_seed(69)
 
     # run the models, feed in raw (filtered) counts
     adata_scvi, scvi_model = correct_batches_scVI(adata, max_considered_genes=max_considered_genes) # does hvg selection if necessary, copies layer to X

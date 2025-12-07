@@ -32,4 +32,15 @@ output across 3 runs needs to be like this:
 + preprocessing.py: 
     -> passes all checks
 
-- Cell_type_annotation.py:
++ Cell_type_annotation.py:
+	-> passes all checks if same pretrained model used for all runs (same model used across all files)
+		- suboptimal because different files might be from diff batches so no one sizes fits all
+	-> fails assert_no_inconsistent_obs_annotations if a new model is trained per run (new model trained per file)
+	-> passes all checks if same set of pretrained models is used for all runs (one pretrained model per file (based on consistent file names and contents))
+
+- batch_aggregation.py:
+	-> passes all checks
+
+- Batch_correction.py:
+	-> fails assert_no_inconsistent_expression, because get_normalized_expression draws a random sample (use a fixed seed for the RNG)
+	-> passes all checks, for a set seed (69) with scvi.settings.seed = seed

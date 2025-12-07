@@ -457,10 +457,21 @@ def annotate_cell_types(
     """ 
     Loops through input_data_dir and runs Cell_type_annotation.py on each contained h5ad file.
     Depending on the model paramter, either z_score or cellassign will be used.
+    
     Z_score gets the z score of all genes after normalization, then sums up the z scores for
     set of marker corresponding to a cell type, cutoff unsure and cutoff other are then used to assign identities.
+    
     Cellassign uses cellassign from scvitools to predict cell types: https://docs.scvi-tools.org/en/1.3.3/user_guide/models/cellassign.html
+    A model is train for each intitial run with a unique file basename, and then saved.
+    The model is reused for all subsequent runs with the same file basename to guarantee reproducibility.
+    This assumes the same file basename contains the exact same data.
 
+    e.g.:
+    input_data_dir = "/path/to/preprocessed" -> contains files "PDAC_cancerous_1.h5ad", "PDAC_cancerous_2.h5ad", "PDAC_non_cancerous_1.h5ad", "PDAC_non_cancerous_2.h5ad"
+    basenames will be "PDAC_cancerous_1.h5ad", "PDAC_cancerous_2.h5ad", "PDAC_non_cancerous_1.h5ad", "PDAC_non_cancerous_2.h5ad"
+    one model is saved for each basename (can only be overriden if model file is manually deleted)
+    reproducibility not guaranteed, if file contents change between runs (eg different filtering parameters in preprocessing)
+    
     Input should be a directory with containing preprocessed h5ad files.
 
     Required annotations:
@@ -601,6 +612,10 @@ def correct_batch_effects(
         verbose: bool = False) -> list[str]:
     """
     Runs Batch_correction.py on an aggregated h5ad file to correct batch effects.
+
+    One scvi and once scanvi model are trained once in the first run.
+    The models are reused for all subsequent runs.
+    To guarantee reproducibility, use the exact same input files for each run.
 
     Input should be an aggregated h5ad file.
 
@@ -1139,11 +1154,13 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection=projection, output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
         """
 
-        for run in range(3):
+        for run in range(2):
             use_ensembl_ids = True
             # mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
             # preprocess_data(RAW_DATA_DIRS[0], mode, use_ensembl_ids=use_ensembl_ids, save_output=True, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0, max_n_MADs=None, max_mito_percentage=0.10), output_prefix=f"run_{run+1}")
-            annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensembl_ids, os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), model="cellassign", verbose=True, save_output=True, input_prefix="run_0", output_prefix=f"cell_type_annotated_run_{run}")
+            # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensembl_ids, os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), model="cellassign", verbose=True, save_output=True, input_prefix="run_0", output_prefix=f"cell_type_annotated_run_{run}")
+            # aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), save_output=True, verbose=True, input_prefix=f"cell_type_annotated_run_0", output_prefix=f"aggregated_run_{run}")
+            correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_run_0_PDAC.h5ad"), max_considered_genes="all", save_output=True, verbose=True, input_prefix=f"aggregated_run_0", output_prefix=f"batch_corrected_run_{run}")
 
 
         purge_tempfiles()
