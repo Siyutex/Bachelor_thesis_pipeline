@@ -9,6 +9,10 @@ from scipy import sparse
 import numpy as np
 from collections import defaultdict
 import hashlib
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 
 
 def load_obsname_dict(file_list: list[str]):
@@ -344,7 +348,7 @@ def assert_obsnames_match(dir: str, n_outputs: int = 1, file_name: str = None):
 
 
     # create list of all files in directory
-    file_list = [os.path.join(dir, file) for file in os.listdir(dir)]
+    file_list = [os.path.join(dir, file) for file in os.listdir(dir) if (os.path.isfile(os.path.join(dir, file)) and ".h5ad" in file)]
 
 
     if file_name != None: # if file_name is given, compare 
@@ -405,7 +409,7 @@ def assert_no_inconsistent_expression(dir: str, layer: str = "X", n_outputs: int
     """
 
     # create list of all files in directory
-    file_list = [os.path.join(dir, file) for file in os.listdir(dir)]
+    file_list = [os.path.join(dir, file) for file in os.listdir(dir) if (os.path.isfile(os.path.join(dir, file)) and ".h5ad" in file)]
 
     if file_name != None: # if file_name is given, compare 
         for dataset in range(n_outputs):
@@ -460,7 +464,7 @@ def assert_no_inconsistent_obs_annotations(dir: str, n_outputs: int = 1, file_na
     """
 
     # create list of all files in directory
-    file_list = [os.path.join(dir, file) for file in os.listdir(dir)]
+    file_list = [os.path.join(dir, file) for file in os.listdir(dir) if (os.path.isfile(os.path.join(dir, file)) and ".h5ad" in file)]
 
     if file_name != None: # if file_name is given, compare 
         for dataset in range(n_outputs):
@@ -514,7 +518,7 @@ def assert_varnames_match(dir: str, n_outputs: int = 1, file_name: str = None):
 
 
     # create list of all files in directory
-    file_list = [os.path.join(dir, file) for file in os.listdir(dir)]
+    file_list = [os.path.join(dir, file) for file in os.listdir(dir) if (os.path.isfile(os.path.join(dir, file)) and ".h5ad" in file)]
 
 
     if file_name != None: # if file_name is given, compare 
@@ -523,12 +527,12 @@ def assert_varnames_match(dir: str, n_outputs: int = 1, file_name: str = None):
             var_name_dict = load_varname_dict(local_file_list)
             overlap_percentage = check_label_overlap(var_name_dict, verbose=False)
             assert overlap_percentage == 1
-            print(f"Check passed for {file_name}_{dataset}, varnames match across all runs.")
+            print(f"Check passed for {file_name}_{dataset}, var names match across all runs.")
     else:
         var_name_dict = load_varname_dict(file_list)
         overlap_percentage = check_label_overlap(var_name_dict, verbose=False)
         assert overlap_percentage == 1
-        print("Check passed, cell IDs match across all files.")
+        print("Check passed, var names match across all files.")
 
 
 def assert_no_inconsistent_var_annotations(dir: str, n_outputs: int = 1, file_name: str = None):
@@ -572,7 +576,7 @@ def assert_no_inconsistent_var_annotations(dir: str, n_outputs: int = 1, file_na
     """
 
     # create list of all files in directory
-    file_list = [os.path.join(dir, file) for file in os.listdir(dir)]
+    file_list = [os.path.join(dir, file) for file in os.listdir(dir) if (os.path.isfile(os.path.join(dir, file)) and ".h5ad" in file)]
 
     if file_name != None: # if file_name is given, compare 
         for dataset in range(n_outputs):
@@ -586,7 +590,7 @@ def assert_no_inconsistent_var_annotations(dir: str, n_outputs: int = 1, file_na
         print("Check passed, var annotations match across all files.")
 
 
-def run_all_checks(dir: str, n_outputs: int = 1, file_name: str = None, layer="X"):
+def run_all_h5ad_checks(dir: str, n_outputs: int = 1, file_name: str = None, layer="X"):
     """
     Run alle assertion functions:
     - assert_obsnames_match (uses passed n_outputs)
@@ -642,13 +646,208 @@ def run_all_checks(dir: str, n_outputs: int = 1, file_name: str = None, layer="X
         pass
 
 
+def assert_tree_equivalence(dir: str):
+    """
+    Assert that the trees in nwk files in the directory directory are identical.
+    Useful for comparing non h5ad files, like nwk.
+    """
+    import skbio
+
+    def strip_distances(tree):
+        for node in tree.traverse():
+            node.length = None
+        return tree
+
+    file_list = [os.path.join(dir, file) for file in os.listdir(dir) if (os.path.isfile(os.path.join(dir, file)) and ".nwk" in file)]
+    
+    # get tree strings without distances in a list
+    str_list = []
+    for file in file_list:
+        tree = skbio.TreeNode.read(file)
+        tree = strip_distances(tree)
+        str_list.append(str(tree))
+
+    # get list of hashes of trees
+    hash_list = []
+    for tree_string in str_list:
+        tree_bits = tree_string.encode("utf-8")
+        tree_hash = hashlib.sha256(tree_bits).digest()
+        hash_list.append(tree_hash)
+
+    # compare hashes
+    inconsistent = False
+    for i, hash in enumerate(hash_list):
+        print(f"hash {i} == hash 0: {hash == hash_list[0]}")
+        if hash != hash_list[0]:
+            inconsistent = True
+            inconsistent_tree_index = i
+
+    # evauluate results
+    if inconsistent == False: # if hashes are the same, print message
+        print("Check passed, all trees are equivalent.")
+        return
+    else: # else find differences
+        for i in range(max(len(str_list[0]), len(str_list[inconsistent_tree_index]))):
+            if str_list[0][i] != str_list[inconsistent_tree_index][i]:
+                char = str_list[0][i]
+                char_zero = str_list[inconsistent_tree_index][i]
+                print(f"{char_zero} != {char}")
+                print(f"Surrounding text: {str_list[inconsistent_tree_index][i-10:i+10]}")
+                return
+
+
+def evaluate_TS_consistency(dir: str):
+    """
+    Take a number of subsampled files with transition states annotated.
+    Check consistency of TSs across runs:
+        - amount (abs / rel) of cells always labelled as TS
+        - amount (abs / rel) of cells always not labelled as TS
+        - amount (abs / rel) of cells that are labelled as TS at at least one run, but not in all runs
+    """  
+
+    # create dataframe that holds cell states for all cells for each run (or "not_sampled" if the cell is not present in the run)
+    def make_df_plots(state_df: pd.DataFrame):
+        """
+        take dataframe with rows = cells, columns = runs, values = state
+
+        make a heatmap of probability of each state for each cell (probability calculated from relative frequency of each state across runs where the cell was sampled)
+        make a colormap of cell states across runs for all cells
+        """
+        
+        def plot_probability_df(df):
+            """
+            input is a dataframe with rows = cells, columns = runs, values = state / not_sampled
+
+            make and save a heatmap of P(state|sampled) for states: cancerous, non_cancerous, transitional
+            if states are consistent across runs, each cell should have 1 for one state and 0 for all other states
+            """
+            
+            def get_state_probabilities(df, state: str):
+                """
+                returns a vector of P(state|sampled) with a value for each cell across all runs
+                """
+                state_counts = df.eq(state).sum(axis=1)
+                not_sampled_counts = df.eq("not_sampled").sum(axis=1)
+                state_probabilities = state_counts / (df.shape[1] - not_sampled_counts)
+
+                return state_probabilities
+
+            df = pd.DataFrame({
+                "cancerous": get_state_probabilities(df, "cancerous"),
+                "non_cancerous": get_state_probabilities(df, "non_cancerous"),
+                "transitional": get_state_probabilities(df, "transitional"),
+            })
+
+            sns.heatmap(df, annot=False, cmap="coolwarm", vmax=1, vmin=0)
+            plt.savefig(os.path.join(dir, "State_probabilities.png"))
+
+        def plot_state_df(df):
+            """
+            input is a dataframe with rows = cells, columns = runs, values = state / not_sampled
+
+            make and save colormap of states across runs for each cell
+            eg cell 1: {run1: cancerous -> blue, run2: non_canerous -> orange, run3: transitional -> green}
+            """
+
+            state_colors = { # hex colors
+                "cancerous": "#1472bf",
+                "non_cancerous": "#ff7f00",
+                "transitional": "#42ab3e",
+                "unassigned": "#000000",
+                "not_sampled": "#FFFFFF"
+            }
+
+            # mapping from state to int, sns needs numeric values
+            state_to_int = {state: i for i, state in enumerate(state_colors.keys())}
+            heatmap_data = df.replace(state_to_int)
+
+            # color map (list of hex colors in same order as state_to_int sorted by int value)
+            colors = [state_colors[state] for state, i in sorted(state_to_int.items(), key=lambda x: x[1])]
+            cmap = ListedColormap(colors)
+
+            sns.heatmap(
+                heatmap_data,
+                annot=False, # do not show orignal labels on data, we have too many cells for that
+                cmap=cmap,
+                cbar=False,  # do not show color bar
+            )
+            plt.ylabel("Cell ID")
+            plt.xlabel("Run")
+            plt.title("Cell states across runs")
+            plt.savefig(os.path.join(dir, "State_colormap.png"))
+                    
+
+        print("plot probability_df")
+        plot_probability_df(state_df)
+        print("plot state_df")
+        plot_state_df(state_df)
+
+
+    # get list of h5ad files corresponding to runs
+    file_list = [os.path.join(dir, file) for file in os.listdir(dir) if (os.path.isfile(os.path.join(dir, file)) and ".h5ad" in file)]
+
+    # get dict of run: [(cell ID, state), ... ]
+    print("cerating run_dict")
+    run_dict = {}
+    for file in file_list:
+        ad = sc.read_h5ad(file)
+        run_dict[file] = list(zip(ad.obs_names, ad.obs["cancer_state_inferred_tree"]))
+    # get dict for run: [cell ID, ...] if that cell ID corresponds to a TS cell
+    print("creating TS_cells_per_run")
+    TS_cells_per_run = {
+        run: [cell_id for (cell_id, state) in cells if state == "transitional"]
+        for run, cells in run_dict.items()
+    }
+    # create dataframe with columns = runs, rows = cells, values = state
+    print("creating state_df")
+    dfs = []
+    for run_id, cells in run_dict.items():
+        df = pd.DataFrame(cells, columns=["cell_id", run_id]) # use cell ID as column for now, needed for df merging, run_id = in this run this cell had that value
+        dfs.append(df)
+    state_df = dfs[0]
+    for df in dfs[1:]:
+        state_df = pd.merge(state_df, df, on="cell_id", how="outer") # merge dfs so each cell_Id (row) always gets the data corresponding to it
+    state_df = state_df.set_index("cell_id") # set cell ID as index and remove the cell ID column
+    state_df = state_df.fillna("not_sampled") # if a cell was not present in a run then label it as "not_sampled"
+
+    # make heatmap of state probability per cell and colormap of state per cell across runs
+    make_df_plots(state_df) 
+
+
+    # get list of all cell IDs that occur across runs
+    all_cell_IDs = set()
+    for cells in run_dict.values():
+        all_cell_IDs.update([cells[i][0] for i in range(len(cells))])
+
+    # get list of all TS cells that occur across all runs in which it was sampled
+    ts_counts = state_df.eq("transitional").sum(axis=1) # count number of times each cell was labelled as TS
+    not_sampled_counts = state_df.eq("not_sampled").sum(axis=1)
+    consistent_ts_cells_mask = ts_counts == state_df.shape[1] - not_sampled_counts # boolean mask
+    consistent_ts_cells = set(state_df[consistent_ts_cells_mask].index)
+
+    # get list of all TS cells that occur at least once, but not always (inconsistently labelled cells)
+    inconsistent_TS_cells = set.union(*(set(value) for value in TS_cells_per_run.values())) # all TS cells that ever occured (*(generator) unpacks the generator and passes each generated expression as a seperate argument)
+    inconsistent_TS_cells -= consistent_ts_cells # remove cells that are consistently labelled as TS
+
+    # get list of all cells that never get labelled as TS
+    consistent_non_TS_cells = all_cell_IDs - (consistent_ts_cells | inconsistent_TS_cells) 
+
+    print(f"Number of total unique cells: {len(all_cell_IDs)}")
+    print(f"\nNumber of consistently labelled transitional cells:{len(consistent_ts_cells)}")
+    print(f"Realtive amount of consistently labelled transitional cells: {len(consistent_ts_cells)/len(all_cell_IDs)}")
+    print(f"\nNumber of inconsistently labelled transitional cells: {len(inconsistent_TS_cells)}")
+    print(f"Relative amount of inconsistently labelled transitional cells: {len(inconsistent_TS_cells)/len(all_cell_IDs)}")
+    print(f"\nNumber of consistently labelled non-transitional cells: {len(consistent_non_TS_cells)}")
+    print(f"Relative amount of consistently labelled non-transitional cells: {len(consistent_non_TS_cells)/len(all_cell_IDs)}")
+
+    
 if __name__ == "__main__":
 
     print("starting script...")
 
-    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/batch_corrected"
-    run_all_checks(dir=dir, n_outputs=1, file_name=None, layer="X_scANVI_corrected")
-
+    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/tree"
+    #run_all_h5ad_checks(dir=dir, n_outputs=1, file_name=None, layer="log1p")
+    evaluate_TS_consistency(dir=dir)
 
 
 

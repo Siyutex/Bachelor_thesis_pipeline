@@ -27,6 +27,14 @@ def read_input_data(input_data_type, input_data_path, var_names):
         return _read_dot_matrix(input_data_path, var_names)
     elif input_data_type == "h5ad_files":
         return sc.read_h5ad(input_data_path) # should already have desired varnames (gene_ids / gene_symbols)
+    elif input_data_type == "tenx_h5_files": # 10x h5 file
+        adata = sc.read_10x_h5(input_data_path) # uses gene symbols as var_names, but saves ENSG ids in var['gene_ids']
+        if var_names == "gene_ids":
+            gene_symbols = adata.var_names
+            adata.var["gene_symbols"] = gene_symbols
+            adata.var_names = adata.var['gene_ids']
+        return adata
+
 
     else:
         raise ValueError(f"Unsupported input_data_type: {input_data_type}")

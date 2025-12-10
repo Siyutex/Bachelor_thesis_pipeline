@@ -27,6 +27,7 @@ def build_tree(adata, cnv_score_matrix, distance_metric):# get cnv score matrix
 
     # add a tiny jitter so pearson correlation can be computed for all cells 
     # (if there are rows with 0 variance (ie all 0s) then pearson correlation cannot be computed --> NaNs)
+    np.random.seed(42) # set RNG seed so we get same jitter across runs
     epsilon = 1e-16
     vprint("adding jitter to X")
     X_jittered = X + epsilon * np.random.randn(*X.shape)

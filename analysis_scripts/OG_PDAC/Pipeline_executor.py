@@ -59,7 +59,8 @@ class pipeline_mode(Enum):
     MTX_TSVs_in_subfolders = 1  #10x genomics, format
     compressed_MTX_TSVs_in_subfolders = 2 #GDC format
     dot_matrix_files = 3 #cancerSCEM format
-    h5ad_files = 4
+    h5ad_files = 4,
+    tenx_h5_files = 5
     NO_MODE_CHOSEN = None
 
 # functions
@@ -84,6 +85,8 @@ def choose_pipeline_mode(raw_data_dir):
         mode = pipeline_mode.dot_matrix_files
     elif any(file.endswith(".h5ad") for file in os.listdir(raw_data_dir)):
         mode = pipeline_mode.h5ad_files
+    elif any(file.endswith(".h5") for file in os.listdir(raw_data_dir)):
+        mode = pipeline_mode.tenx_h5_files
 
     if mode == pipeline_mode.NO_MODE_CHOSEN:
         raise ValueError("Could not determine pipeline mode. Please check the structure of the provided RAW_DATA_DIR. It should either contain subdirectories with mtx and tsv files (10x genomics format), subdirectories with compressed mtx and tsv files (GDC format) or directly .matrix files (cancerSCEM format).")
@@ -1154,14 +1157,40 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection=projection, output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
         """
 
-        for run in range(2):
-            use_ensembl_ids = True
-            # mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
-            # preprocess_data(RAW_DATA_DIRS[0], mode, use_ensembl_ids=use_ensembl_ids, save_output=True, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0, max_n_MADs=None, max_mito_percentage=0.10), output_prefix=f"run_{run+1}")
-            # annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensembl_ids, os.path.join(AUX_DATA_DIR, "annotations", "marker_genes.json"), model="cellassign", verbose=True, save_output=True, input_prefix="run_0", output_prefix=f"cell_type_annotated_run_{run}")
-            # aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), save_output=True, verbose=True, input_prefix=f"cell_type_annotated_run_0", output_prefix=f"aggregated_run_{run}")
-            correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_run_0_PDAC.h5ad"), max_considered_genes="all", save_output=True, verbose=True, input_prefix=f"aggregated_run_0", output_prefix=f"batch_corrected_run_{run}")
 
+        def subsample_cells(file_path, fraction, n_samples, output_dir):
+            """
+            Produce new adata with layer as X, then subsample to fraction of cells without replacement
+            """
+
+            # make sure output_dir exists
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir)
+
+            # create isolated adata
+            adata = sc.read(file_path)
+
+            # create boolean mask
+            n_true = int(fraction * adata.shape[0]) # number of cells to keep
+            mask = np.zeros(adata.shape[0], dtype=bool)
+            mask[:n_true] = True # array with size n_obs, but ordered
+            
+            # subsample
+            for i in range(n_samples):
+                np.random.shuffle(mask) # shuffle to keep a random set of cells
+                ss_adata = adata[mask,:].copy()
+                ss_adata.write(os.path.join(output_dir, f"sample_{i}.h5ad"), compression="gzip")
+                del ss_adata # free up memory
+
+
+
+        import scanpy as sc
+        for run in range(5):
+            file_path = os.path.join(OUTPUT_STORAGE_DIR, "scMF", "scMF_run0_PDAC_ductal_cell.h5ad")
+            temp = os.path.join(TEMP_DIR, "samples")
+            subsample_cells(file_path, fraction=0.7, n_samples=1, output_dir=temp)
+            get_phylogenetic_tree(os.path.join(temp, "sample_0.h5ad"), cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state_inferred_scMF", transition_entropy_threshold=0.8, save_output=True, verbose=True, input_prefix=f"scMF_run0", output_prefix=f"transition_clades_run{run}")
+            purge_tempfiles()
 
         purge_tempfiles()
         sys.exit(0)
