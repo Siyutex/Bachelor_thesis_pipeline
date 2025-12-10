@@ -63,3 +63,30 @@ Preprocessing:
   - expected_doublet_percentage: float = 0.024 # recommended by 10x genomics website for the amount of cells used in https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE212966#:~:text=Summary%20Pancreatic%20ductal%20adenocarcinoma%20,plot%20to%20predict%20the%20overall
 
 Cell Type annotation:
+  - marker gene choice: backed by literature sources cited in annotations/Cell_type_Markers
+  (no other hyperparamters if cellassign is used)
+
+Aggregation:
+  (has no hyperparamters)
+
+Batch correction:
+  - seed = 42: need a consitent seed to guarantee cross - run reproducibility
+  - max_considered_genes = all: so cnv inference can get the whole cnv profile of a cell
+
+CNV: 
+  - isolate ductals: because PDAC arises from ductal cells, the rest is unimportant for modelling PDAC expression
+
+scMF:
+  (has no hyperparamters)
+
+tree:
+  - distance metric = euclidean: if we only use correlation, then identical cnv profiles with differing magnitudes will be indisinguishable
+  - n_clades = 30: Shin et al. did the same in their 2025 paper
+  - grouping metric = scMF: scMF, according to its own publication is the best performing malignancy annotation method
+  - transition entropy threshold = 0.8: ARBITRARY choice, but taking top n percentile would also be arbitrary; 0.8 = "reasonable mixture"
+
+isolation:
+  - HVGs = 3000: ARBITRARY choice, might need to refine, look what Shin et al did
+  - log1p: to reduce noise
+
+

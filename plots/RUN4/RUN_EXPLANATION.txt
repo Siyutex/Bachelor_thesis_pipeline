@@ -1,0 +1,2 @@
+implemented scmf, ended run bcs TS still volatile (later discovered it was because of retraining models 
+all the time and not setting seeds for RNG in BC and tree)

@@ -1,0 +1,2 @@
+genes selected according to Smillie et al. 2019 table S2 (excel file), non colon specifc populations
+copied from pancreatic set

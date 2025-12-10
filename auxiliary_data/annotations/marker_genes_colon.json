@@ -1,0 +1,102 @@
+  {
+  "goblet_cell": [
+    "MUC2",
+    "TFF3",
+    "SPDEF",
+    "AGR2",
+    "FCGBP"
+  ],
+  "enterocyte": [
+    "FABP1",
+    "AQP8",
+    "ALPI",
+    "KRT20",
+    "SLC5A1"
+  ],
+  "enteroendocrine_cell": [
+    "CHGA",
+    "CHGB",
+    "NEUROD1",
+    "PCSK1N",
+    "SCGN"
+  ],
+  "tuft_cell": [
+    "POU2F3",
+    "TRPM5",
+    "DCLK2",
+    "GFI1B"
+  ],
+  "T_cell": [
+    "PTPRC",
+    "CD3D",
+    "CD3E",
+    "CD4",
+    "CD8A"
+  ],
+  "B_cell": [
+    "PTPRC",
+    "CD19",
+    "CD79A",
+    "MS4A1",
+    "MZB1"
+  ],
+  "NK_cell": [
+    "PTPRC",
+    "NCAM1",
+    "NKG7",
+    "GNLY"
+  ],
+  "macrophage": [
+    "PTPRC",
+    "CD14",
+    "CD68",
+    "LYZ",
+    "FCGR3A"
+  ],
+  "dendritic_cell": [
+    "PTPRC",
+    "ITGAX",
+    "CLEC9A"
+  ],
+  "neutrophil": [
+    "PTPRC",
+    "S100A8",
+    "S100A9",
+    "FCGR3B"
+  ],
+  "mast_cell": [
+    "PTPRC",
+    "TPSAB1",
+    "KIT"
+  ],
+  "fibroblast": [
+    "PDGFRA",
+    "VIM",
+    "COL1A1",
+    "COL1A2",
+    "LUM",
+    "DCN"
+  ],
+  "endothelial_cell": [
+    "PECAM1",
+    "VWF",
+    "CLDN5"
+  ],
+  "smooth_muscle_cell": [
+    "ACTA2",
+    "PDGFRB",
+    "RGS5"
+  ],
+  "erythrocyte": [
+    "HBA1",
+    "HBA2",
+    "HBB",
+    "SLC4A1",
+    "GYPA",
+    "ALAS2",
+    "AHSP",
+    "TFRC",
+    "GATA1",
+    "KLF1"
+  ]
+}
