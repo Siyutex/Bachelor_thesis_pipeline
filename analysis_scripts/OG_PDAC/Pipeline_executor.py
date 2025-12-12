@@ -923,7 +923,9 @@ def isolate_and_HVGs(
         main_layer: str = None,
         add_log1p: bool = False,
         max_considered_genes: int | Literal["all"] = 3000,
-        isolation_dict: dict[str, list[str]] = {},
+        genes_to_keep: list[str] = [],
+        isolation_dict: dict[str, list] = {},
+        preservation_dict: dict[str, list] = {},
         save_output: bool = False,
         input_prefix: str = "transition_clades",
         output_prefix: str = "isolated",
@@ -939,6 +941,8 @@ def isolate_and_HVGs(
     Requires the following annotations to be present: 
         - the main_layer (if main_layer is not None) in adata.X, adata.layers or adata.obsm
         - all conditions in isolation_dict must have a column in adata.obs with that has at least one entry of the type to isolate (e.g. cancer_state: ["normal", "transitional"] -> requires adata.obs["cancer_state"].unqiue() == ["normal", "transitional", ...])
+        - all conditions in preservation_dict must have a column in adata.obs with that has at least one entry of the type to isolate (e.g. cancer_state: ["normal", "transitional"] -> requires adata.obs["cancer_state"].unqiue() == ["normal", "transitional", ...])
+        - all values in genes_to_keep must exist in adata.var_names, adata.var["gene_symbols"] or adata.var["gene_ids"]
 
     Outputs a gzip compressed h5ad file with, optionally, reduced layers / obsms and HVGs.
     Output files are named {output_prefix}_{basename}{suffix}.h5ad.
@@ -952,7 +956,9 @@ def isolate_and_HVGs(
         main_layer (str, optional): layer / obsm that will be moved to adata.X. Defaults to None, meaning adata.X will remain as is.
         add_log1p (bool, optional): whether to add a new layer with log1p(main_layer). Defaults to False.
         max_considered_genes (int, optional): maximum number of HVGs to consider. Defaults to 3000. If this is set to "all", no HVGs will be selected.
-        isolation_dict (dict[str, list[str]], optional): dictionary of conditions to isolate, each key is a condition and each value is a list of the types to isolate. Defaults to {}
+        genes_to_keep (list[str], optional): these genes will be kept regardless of their HVG status. Defaults to [].
+        isolation_dict (dict[str, list], optional): dictionary of conditions to isolate, each key is a condition and each value is a list of the types to isolate. Defaults to {}
+        preservation_dict (dict[str, list], optional): dictionary of conditions where cells that have them will be kept regardless of isolation_dict (eg. {"cnv_clade" : 28} -> all cells from cnv clade 28 will be kept). Defaults to {}.
         save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/reduced. Defaults to False.
         input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "batch_corrected".
         output_prefix (str, optional): prefix for output file names. Defaults to "CNV_inferred".
@@ -975,7 +981,7 @@ def isolate_and_HVGs(
 
     # run script and assign path to temporary output file
     print(f"Reducing {input_data_file}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "matrix_isolation_HVGs.py"), input_data_file, output_temp_dir, [main_layer, add_log1p, max_considered_genes, isolation_dict, verbose])
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "matrix_isolation_HVGs.py"), input_data_file, output_temp_dir, [main_layer, add_log1p, max_considered_genes, genes_to_keep, isolation_dict, preservation_dict, verbose])
 
     # rename output file
     HVG_suffix = "_HVG" if max_considered_genes != "all" else ""
@@ -1183,28 +1189,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection=projection, output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
         """
 
-        # shin et al data run, differences: we use colon marker genes, different raw data dir, we do not isolate any cell type, other than that run params are identical
-        
-        #use_ensembl_ids = True
-        #RAW_DATA_DIRS = [os.path.join(SCRIPT_DIR, "..", "..", "Data", "Shin_et_al.", "shin_non_cancerous"),
-        #                 os.path.join(SCRIPT_DIR, "..", "..", "Data", "Shin_et_al.", "shin_cancerous")]
-        #mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
-        #for data_dir in RAW_DATA_DIRS:
-        #    preprocess_data(data_dir, mode, use_ensembl_ids=use_ensembl_ids, save_output=True, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0, max_n_MADs=None, max_mito_percentage=0.10))
-        #annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensembl_ids, os.path.join(AUX_DATA_DIR, "annotations", "marker_genes_colon.json"), model="cellassign", verbose=True, save_output=True)
-        #output_path_list = aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), save_output=True, verbose=True)
-        #output_path_list = correct_batch_effects(output_path_list[0], max_considered_genes="all", save_output=True, verbose=True)
-        #output_path_list = infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_shin.h5ad"), corrected_representation="X_scANVI_corrected", reference_genome_path=os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), cell_type=None, save_output=True, verbose=True) # 99% of cells are labelled as goblet_cells so no need to isolate (they also didn'T do this in the paper)
-        #output_path_list = reduce_data(output_path_list[0], input_prefix="CNV_inferred", layers_to_remove=["X", "X_scANVI_corrected_gene_values_cnv", "X_scVI_corrected"], save_output=True, verbose=True)
-        # run_scMF(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_shin.h5ad"), layer="X_scANVI_corrected", save_output=True, verbose=True)
-
-
-        for run in range(5):
-            file_path = os.path.join(OUTPUT_STORAGE_DIR, "scMF", "scMF_CNV_inferred_shin.h5ad")
-            temp = os.path.join(TEMP_DIR, "samples")
-            subsample_cells(file_path, fraction=0.7, n_samples=1, output_dir=temp)
-            get_phylogenetic_tree(os.path.join(temp, "sample_0.h5ad"), cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state", transition_entropy_threshold=0.8, save_output=True, verbose=True, input_prefix=f"scMF_run0", output_prefix=f"transition_clades_run{run}")
-            purge_tempfiles()
+        # isolate_and_HVGs(os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_run4_sample_0.h5ad"), main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, preservation_dict={"cnv_clade": [28]}, genes_to_keep=["MYC"], save_output=True, verbose=True)
+        cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "isolated", "isolated_run4_sample_0_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection="PCA", save_output=True, verbose=True, show=False)
 
 
 
