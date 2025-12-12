@@ -1,12 +1,61 @@
-- cell ids (obs_names) are consistent across RUNs (I tested this with compare_present_cell.py)
+## Cell ID cross run consistency
+- SHORT: cell ids (obs_names) are consistent across RUNs (I tested this with compare_present_cell.py)
     -> I can compare what cells are labelled as transitional by obs_names
 
+- RESULT: (from 3 aggregated files with slightly different preprocessing paramters, which I thought changes cell order -> changes assigned names in concatenation (it does not, apparently))
+    Getting obs names
+    Checking label overlap...
+    No duplicates found in within each file.
+    Total labels: 48997
+    Labels shared across all files: 34074
+    Percentage of shared labels: 0.70
+    Labels present in > 1 file: 42478
+    Percentage of labels present in > 1 file: 0.867
+    getting differently named cells
+    Amount of cells that exist under different names in different adatas: 0 -> naming is consistent, even with oirignal approach, so we can compare cells by obsname
+
+## Transition state consistency
 - there are only 61 cells which are consistently labelled as transitional acress RUNS 3.5, 3,6, 4 (also checked with compare_present_cells.py)
-	- after makug pipeline deterministic, and subsampling 70% of cells for 5 runs of tree:
-		12% of cells are transitional in all runs they appear in
-		20% of cells are inconsistently labelled as transitional 
-		(which is much better than the 1.4% vs 30% the where (wrongly) observed when considering
-		 P(transitional) instead of P(transitioanl | sampled))
+
+- after making pipeline deterministic, and subsampling 70% of cells for 5 runs of tree (grouping metric = scMF, PDAC):
+	12% of cells are transitional in all runs they appear in
+	20% of cells are inconsistently labelled as transitional 
+	(which is much better than the 1.4% vs 30% the where (wrongly) observed when considering
+		P(transitional) instead of P(transitioanl | sampled))
+
+- then compared if inconstistency also exists with shin et al. data (their filtering: mtio = 15%, mine: mito=10%, UMI, etc; other than that identical except for method choices)
+
+    RESULT with shin et al data (gtouping metric = scMF):
+
+    Number of total unique cells: 11479
+    Number of consistently labelled transitional cells:0
+    Realtive amount of consistently labelled transitional cells: 0.0
+    Number of inconsistently labelled transitional cells: 0
+    Relative amount of inconsistently labelled transitional cells: 0.0
+    Number of consistently labelled non-transitional cells: 11479
+    Relative amount of consistently labelled non-transitional cells: 1.0
+
+    shin grouping metric = cancer state inferred:
+
+	Number of total unique cells: 11472
+    Number of consistently labelled transitional cells:206
+    Realtive amount of consistently labelled transitional cells: 0.017956764295676428
+    Number of inconsistently labelled transitional cells: 4104
+    Relative amount of inconsistently labelled transitional cells: 0.3577405857740586
+    Number of consistently labelled non-transitional cells: 7162
+    Relative amount of consistently labelled non-transitional cells: 0.624302649930265
+
+    Shin grouping metric = cancer state:
+
+    Number of total unique cells: 11477
+    Number of consistently labelled transitional cells:3833
+    Realtive amount of consistently labelled transitional cells: 0.33397229241090876
+    Number of inconsistently labelled transitional cells: 4974
+    Relative amount of inconsistently labelled transitional cells: 0.4333885161627603
+    Number of consistently labelled non-transitional cells: 2670
+    Relative amount of consistently labelled non-transitional cells: 0.2326391914263309
+
+
 
 ## cells with different expression across runs? ##
 reduced adatas (X_scANVi_corrected_cnv) (3.5 3.6 4.0):

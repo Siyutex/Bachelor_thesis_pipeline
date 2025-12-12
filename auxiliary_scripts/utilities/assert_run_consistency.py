@@ -848,19 +848,6 @@ if __name__ == "__main__":
     dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/tree"
     #run_all_h5ad_checks(dir=dir, n_outputs=1, file_name=None, layer="log1p")
     evaluate_TS_consistency(dir=dir)
+    
 
-
-
-    # RESULT: (from 3 aggregated files with slightly different preprocessing paramters, which I thought changes cell order -> changes assigned names in concatenation)
-    """
-    Getting obs names
-    Checking label overlap...
-    No duplicates found in within each file.
-    Total labels: 48997
-    Labels shared across all files: 34074
-    Percentage of shared labels: 0.70
-    Labels present in > 1 file: 42478
-    Percentage of labels present in > 1 file: 0.867
-    getting differently named cells
-    Amount of cells that exist under different names in different adatas: 0 -> naming is consistent, even with oirignal approach, so we can compare cells by obsname
-    """
+    

@@ -199,6 +199,32 @@ def reduce_data(
     return output_file_list
 
 
+def subsample_cells(file_path, fraction, n_samples, output_dir):
+    import scanpy as sc
+    """
+    Produce new adata with layer as X, then subsample to fraction of cells without replacement
+    """
+
+    # make sure output_dir exists
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # create isolated adata
+    adata = sc.read(file_path)
+
+    # create boolean mask
+    n_true = int(fraction * adata.shape[0]) # number of cells to keep
+    mask = np.zeros(adata.shape[0], dtype=bool)
+    mask[:n_true] = True # array with size n_obs, but ordered
+    
+    # subsample
+    for i in range(n_samples):
+        np.random.shuffle(mask) # shuffle to keep a random set of cells
+        ss_adata = adata[mask,:].copy()
+        ss_adata.write(os.path.join(output_dir, f"sample_{i}.h5ad"), compression="gzip")
+        del ss_adata # free up memory
+
+
 def cluster_and_plot(
         # necessary arguments
         modules: list[Literal["projections+DEGs","projections", "pseudotime_vs_cnv", "phylogenetic_tree", "gene_expression_vs_obs"]],
@@ -1157,19 +1183,29 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection=projection, output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
         """
 
-        # shin et al data run, differences: we use colon marker genes, 
-        use_ensembl_ids = True
-        RAW_DATA_DIRS = [os.path.join(SCRIPT_DIR, "..", "..", "Data", "Shin_et_al.", "non_cancerous"),
-                         os.path.join(SCRIPT_DIR, "..", "..", "Data", "Shin_et_al.", "cancerous")]
-        mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
-        for data_dir in RAW_DATA_DIRS:
-            preprocess_data(data_dir, mode, use_ensembl_ids=use_ensembl_ids, save_output=True, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0, max_n_MADs=None, max_mito_percentage=0.10))
-        annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensembl_ids, os.path.join(AUX_DATA_DIR, "annotations", "marker_genes_colon.json"), model="cellassign", verbose=True, save_output=True)
-        output_path_list = aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), save_output=True, verbose=True)
-        output_path_list = correct_batch_effects(output_path_list[0], max_considered_genes="all", save_output=True, verbose=True)
-        output_path_list = infer_CNVs(output_path_list[0], corrected_representation="X_scANVI_corrected", reference_genome_path=os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), cell_type="ductal_cell", save_output=True, verbose=True)
-        output_path_list = reduce_data(output_path_list[0], input_prefix="CNV_inferred", layers_to_remove=["X", "X_scANVI_corrected_gene_values_cnv", "X_scVI_corrected"], save_output=True, verbose=True)
-        run_scMF(output_path_list[0], layer="X_scANVI_corrected", save_output=True, verbose=True)
+        # shin et al data run, differences: we use colon marker genes, different raw data dir, we do not isolate any cell type, other than that run params are identical
+        
+        #use_ensembl_ids = True
+        #RAW_DATA_DIRS = [os.path.join(SCRIPT_DIR, "..", "..", "Data", "Shin_et_al.", "shin_non_cancerous"),
+        #                 os.path.join(SCRIPT_DIR, "..", "..", "Data", "Shin_et_al.", "shin_cancerous")]
+        #mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
+        #for data_dir in RAW_DATA_DIRS:
+        #    preprocess_data(data_dir, mode, use_ensembl_ids=use_ensembl_ids, save_output=True, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0, max_n_MADs=None, max_mito_percentage=0.10))
+        #annotate_cell_types(os.path.join(OUTPUT_STORAGE_DIR, "preprocessed"), use_ensembl_ids, os.path.join(AUX_DATA_DIR, "annotations", "marker_genes_colon.json"), model="cellassign", verbose=True, save_output=True)
+        #output_path_list = aggregate_batches(os.path.join(OUTPUT_STORAGE_DIR, "cell_type_annotated"), save_output=True, verbose=True)
+        #output_path_list = correct_batch_effects(output_path_list[0], max_considered_genes="all", save_output=True, verbose=True)
+        #output_path_list = infer_CNVs(os.path.join(OUTPUT_STORAGE_DIR, "batch_corrected", "batch_corrected_shin.h5ad"), corrected_representation="X_scANVI_corrected", reference_genome_path=os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), cell_type=None, save_output=True, verbose=True) # 99% of cells are labelled as goblet_cells so no need to isolate (they also didn'T do this in the paper)
+        #output_path_list = reduce_data(output_path_list[0], input_prefix="CNV_inferred", layers_to_remove=["X", "X_scANVI_corrected_gene_values_cnv", "X_scVI_corrected"], save_output=True, verbose=True)
+        # run_scMF(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_shin.h5ad"), layer="X_scANVI_corrected", save_output=True, verbose=True)
+
+
+        for run in range(5):
+            file_path = os.path.join(OUTPUT_STORAGE_DIR, "scMF", "scMF_CNV_inferred_shin.h5ad")
+            temp = os.path.join(TEMP_DIR, "samples")
+            subsample_cells(file_path, fraction=0.7, n_samples=1, output_dir=temp)
+            get_phylogenetic_tree(os.path.join(temp, "sample_0.h5ad"), cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state", transition_entropy_threshold=0.8, save_output=True, verbose=True, input_prefix=f"scMF_run0", output_prefix=f"transition_clades_run{run}")
+            purge_tempfiles()
+
 
 
         purge_tempfiles()

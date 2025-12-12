@@ -51,6 +51,12 @@ SOLUTION: replace the original code in the if statement in line 238 with this (w
             y_pred = self.core_model.predict(X)
             y_prob = self.core_model.predict_proba(X)[:, 1]
 
+(issue fixed in scMalignantFinder 1.1.8)
+different issue showed up in 1.1.8:
+Import error: utils cannot be imported in __init__.py, commenting out the
+from . import utiles
+line fixes the issue
+
 
 
 Hyperparameter choices (for reproducibility):

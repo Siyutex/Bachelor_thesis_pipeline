@@ -1,10 +1,8 @@
 # uses sc malignant finder to determine malignancy states for each cell 
 
-import scMalignantFinder
 from scMalignantFinder import classifier
 import scanpy as sc
 import helper_functions as hf
-import importlib.resources as resources # nneded to access pretrained model
 import warnings
 import os
 

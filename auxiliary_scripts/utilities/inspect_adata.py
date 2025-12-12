@@ -31,17 +31,35 @@ def check_n_obs(adata):
     for key in adata.obsm.keys():
         print(f"Number of observations in {key}: {adata.obsm[key].shape[0]}")
 
+def check_obs_percentage(adata, obs_dict):
+    """
+    Check what percentage of cells has obs_column == value
+    where obs column is they key in the dict and value is the union of the values
+    """
+
+    for obs_column, value in obs_dict.items():
+        mask = adata.obs[obs_column].isin(value)
+        print(f"Percentage of cells with {obs_column} == {value}: {mask.sum() / adata.n_obs * 100}")
+
 if __name__ == "__main__":
 
     layer_to_check = None # check library sizes for this layer
     file_locations = [
-        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/isolated_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad",
+        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/scMF/scMF_CNV_inferred_shin.h5ad",
     ]
+
+
+
+    obs_dict = {
+        "cancer_state": ["cancerous"],
+        "cancer_state_inferred": ["cancerous"],
+        "cancer_state_inferred_scMF": ["cancerous"]
+    }
 
     for path in file_locations:
         adata = sc.read_h5ad(path)
-        for extract in ["cnv_clade"]:
-            show_annotation(adata, extract)
+        check_obs_percentage(adata, obs_dict=obs_dict)
+        
 
 
 

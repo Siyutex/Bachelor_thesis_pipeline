@@ -1,0 +1,5 @@
+sc sc_malignant_finder apparently thinks all these cells are cancerous even if shin et al
+state in their paper that one organoid sample was from normal colon
+
+obviously this leads to 100% consistency if grouping metric = scmf, if everything is cancer 
+then entropy can never be higher than 0 -> no TS
