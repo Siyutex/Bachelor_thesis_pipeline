@@ -1006,6 +1006,9 @@ def infer_pseudotime(
         flavor: Literal["monocle", "dpt"] = "monocle",
         layer: str = "log1p",
         smoothe_expression: bool = True,
+        find_switches: bool = True,
+        bic_threshold: float = 10,
+        mean_threshold: float = 0.5,
         save_output: bool = False,
         input_prefix: str = "isolated",
         output_prefix: str = "pseudotime_inferred",
@@ -1023,16 +1026,24 @@ def infer_pseudotime(
     Outputs a gzip compressed h5ad with pseudotime annotated for each cell. 
     Output files are named {output_prefix}_{basename}.h5ad.
 
-    Annotations added to adata.obs: 
+    Annotations added to adata.obs:
         - if flavor == "dpt", adata.obs['dpt_pseudotime']: pandas.Series (dtype float) (pseudotime value for each cell)
         - if flavor == "monocle", adata.obs['monocle_pseudotime']: pandas.Series (dtype float) (pseudotime value for each cell)
         
+    Annotations added to adata.var:
+        - if find_switches == True, adata.var['is_switch']: bool (wether the gene is a switch or not)
+        - if find_switches == True, adata.var['bic_k1']: float (bic for 1 component GMM)
+        - if find_switches == True, adata.var['bic_k2']: float (bic for 2 component GMM)
+
     Parameters:
         input_data_file (str): path to aggregated / batch corrected h5ad file.
         origin_clade (int, optional): root clade for pseudotime inference (this should be the most normal clade, lowest cnv / whatver fitting metric you use).
         flavor (Literal["monocle", "dpt"], optional): pseudotime inference method. Defaults to "monocle".
         layer (str, optional): layer / obsm / adata.X to use for pseudotime inference. Defaults to "log1p".
         smoothe_expression (bool, optional): whether to smoothe expression matrix along pseudotime. Defaults to True.
+        find_switches (bool, optional): whether to isolate genes that switch expression along pseudotime (ON / OFF). Defaults to True.
+        bic_threshold (float, optional): genes are considered switching genes if the bic for a 2 component GMM is at most the bic for the 1 component GMM - bic_threshold. Set higher for a stricter selection. Defaults to 10.
+        mean_threshold (float, optional): switching genes identified by the GMM method are only get is_switch = True if the mean expression of the higher component is at least mean(lower component) + mean(lower component)*mean_threshold. Defaults to 0.5.
         save_output (bool, optional): whether to save output files permanently to OUTPUT_STORAGE_DIR/CNV. Defaults to False.
         input_prefix (str, optional): prefix of input file names, must match or will cause error. Defaults to "batch_corrected".
         output_prefix (str, optional): prefix for output file names. Defaults to "CNV_inferred".
@@ -1055,7 +1066,7 @@ def infer_pseudotime(
 
     # run script and assign path to temporary output file
     print(f"Inferring pseudotime from {input_data_file}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "pseudotime_inference.py"), input_data_file, output_temp_dir, [origin_clade, flavor, layer, smoothe_expression, verbose])
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "pseudotime_inference.py"), input_data_file, output_temp_dir, [origin_clade, flavor, layer, smoothe_expression, find_switches, bic_threshold, mean_threshold, verbose])
 
     # rename output file
     os.rename(temp_output_path, os.path.join(output_temp_dir, f"{output_prefix}_{os.path.basename(input_data_file).removeprefix(input_prefix + "_")}"))
@@ -1072,12 +1083,65 @@ def infer_pseudotime(
     return output_file_list
 
 
-def infer_GRN_edges(input_data_file: str, n_nodes = None, verbose: bool = False):
+def infer_GRN_edges(
+        input_data_file: str,
+        layer = "log1p",
+        n_nodes = None,
+        tf_list_file: str = None, 
+        convergence_threshold: float = 0.05,
+        top_n_regulators: int = 5,
+        min_runs: int = 20,
+        min_stability: int = 0.5,
+        verbose: bool = False,
+        input_prefix: str = "pseudotime_inferred",
+        output_prefix: str = "GRN_edges",
+        save_output: bool = False) -> list[str]:
     """ 
-    Infer the edges of a GRN from a given aggregated / batch corrected h5ad file.
-    Outputs a JSON with inferred edges for each target gene as list.
-    Set n_nodes to limit the number of nodes in the output GRN, by default, all
-    genes are used.
+    Infer the edges of a GRN from a given h5ad file by bootstrapping grnboost2.
+    A transcription factor list can be passed to limit the space of potential regulators.
+
+    Input should be an h5ad file, ideally with expression smoothed along pseudotime and switch genes isolated.
+    
+    Requires the following annotations to be present:
+        - adata.layers[layer]; expression matrix that should be used to infer edges from.
+          (log1p wtih smoothed expression is recommended)
+
+    Outputs a json file where keys = target gene, values = list of most stable regulators
+
+    This script adds no annotations to adata, as it does not return an h5ad file.
+
+    Parameters
+    ----------
+    input_data_file : str
+        path to h5ad file.
+    layer : str, optional
+        layer in adata.layers that should be used for edge inference. Defaults to "log1p".
+        Will use adata.X if layer is "X".
+    n_nodes : int, optional
+        maximum number of nodes to consider for GRN. Defaults to None meaning all genes are considered as nodes.
+        (this is primarily used for debugging as it randomly chooses genes from adata.var_names)
+    tf_list_file : str, optional
+        path to transcription factor list file (txt). Defaults to None, meaning all genes will be considered as potential regulators.
+    convergence_threshold : float, optional
+        convergence limit; stops when average edge stability (stdev of occurance across runs) relatively changes by less than this value from one run to next. Defaults to 0.05 = 5%.
+    top_n_regulators : int, optional
+        maximum number of regulators to consider for each target gene. Defaults to 5.
+    min_runs : int, optional
+        minimum amount of runs before converging (it could otherwise happen that stdevs randomly fall close to eachother and premture false convergence occurs). Defaults to 20.
+    min_stability : float, optional
+        putative regulators need to occur at least in this percentage of rens eg 0.5 = 50% of runs. Defaults to 0.5.
+    verbose: bool, optional
+        whether to print verbose output from subprocess.
+    input_prefix : str, optional
+        prefix of input file names, must match or will cause error. Defaults to "pseudotime".
+    output_prefix : str, optional
+        prefix for output file names. Defaults to "GRN_edges".
+    save_output : bool, optional
+        whether to save output files permanently to OUTPUT_STORAGE_DIR/GRN_edges. Defaults to False.
+        
+    Returns
+    -------
+    list[str]: list of paths to output files
     """
 
     #check if OUTCOME_STORAGE_DIR and TEMP_DIR have batch_corrected folder, if not create it
@@ -1088,13 +1152,21 @@ def infer_GRN_edges(input_data_file: str, n_nodes = None, verbose: bool = False)
     output_storage_dir = os.path.join(OUTPUT_STORAGE_DIR, "GRN_edges")
     output_temp_dir = os.path.join(TEMP_DIR, "GRN_edges")
 
+    # assign output file list
+    output_file_list = []
+
     # run script and assign path to temporary output file
-    print(f"Inferring GRN from {input_data_file}")
-    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "GRN_edge_inference.py"), input_data_file, output_temp_dir, [verbose, n_nodes])
+    print(f"Inferring GRN edges from {input_data_file}")
+    temp_output_path = hf.execute_subprocess(os.path.join(SCRIPT_DIR, "GRN_edge_inference.py"), input_data_file, output_temp_dir, [layer, n_nodes, tf_list_file, convergence_threshold, top_n_regulators, min_runs, min_stability, input_prefix, output_prefix, verbose])
+
+    # naming happens in subprocess
+    output_file_list.append(temp_output_path)
 
     # if specified, permanently store a copy of the temporary output file
-    if OUTCOME_STORAGE["GRN_edge_inference.py"] == True:
+    if save_output == True:
         shutil.copy(temp_output_path, os.path.join(output_storage_dir, os.path.basename(temp_output_path)))
+
+    return output_file_list
 
 
 def infer_GRN_rules(input_data_file: str, edge_set_file: str, verbose: bool = False):
@@ -1189,10 +1261,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection=projection, output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
         """
 
-        # isolate_and_HVGs(os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_run4_sample_0.h5ad"), main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, preservation_dict={"cnv_clade": [28]}, genes_to_keep=["MYC"], save_output=True, verbose=True)
-        cluster_and_plot(["projections"], input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "isolated", "isolated_run4_sample_0_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"), obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection="PCA", save_output=True, verbose=True, show=False)
-
-
+        infer_GRN_edges(input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "pseudotime", "pseudotime_inferred_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"), tf_list_file=os.path.join(AUX_DATA_DIR, "annotations", "tf_symbols_list.txt"), save_output=True, verbose=True)
 
         purge_tempfiles()
         sys.exit(0)
