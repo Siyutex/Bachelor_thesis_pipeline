@@ -110,7 +110,12 @@ output across 3 runs needs to be like this:
 	deterministic
 	-> passes all checks, for a set seed for the numpy rng for adding jitter to distance metric
 
-
 - matrix_isolation_HVGs.py
 	-> passes all checks, expression matches for log1p
+
+- pseudotime_inference.py
+    -> passes all chekcs, expression matches for log1p
+
+- GRN_edge_inference.py
+    -> visual inspection of 3 different run's edge sets indicates determinism
 	

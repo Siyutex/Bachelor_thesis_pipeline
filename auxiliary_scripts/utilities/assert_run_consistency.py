@@ -845,9 +845,9 @@ if __name__ == "__main__":
 
     print("starting script...")
 
-    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/tree"
+    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime"
     #run_all_h5ad_checks(dir=dir, n_outputs=1, file_name=None, layer="log1p")
-    evaluate_TS_consistency(dir=dir)
+    run_all_h5ad_checks(dir=dir, layer="log1p")
     
 
     

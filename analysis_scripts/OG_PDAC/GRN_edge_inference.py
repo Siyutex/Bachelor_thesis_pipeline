@@ -157,6 +157,7 @@ if __name__ == "__main__":
     vprint = hf.make_vprint(verbose)
 
     # intialize RNG
+    np.random.seed(42)
     rng = np.random.default_rng(seed=42)
 
     # import data from h5ad file
@@ -196,7 +197,7 @@ if __name__ == "__main__":
 
         # run GRN inference (^2 compute time, 2324 genes take 2:40 minutes, cells do not seem to affect runtime)
         vprint("Running GRN inference...")
-        grn = grnboost2(subsample_df, verbose=verbose, tf_names=tf_ensg_list)
+        grn = grnboost2(subsample_df, verbose=verbose, tf_names=tf_ensg_list, seed=42)
 
         # Calculate the 95th percentile threshold of the 'importance' column
         importance_threshold = grn['importance'].quantile(0.95)

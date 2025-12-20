@@ -1261,7 +1261,11 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cnv_score", "cnv_clade"], layers=["log1p"], projection=projection, output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
         """
 
-        infer_GRN_edges(input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "pseudotime", "pseudotime_inferred_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"), tf_list_file=os.path.join(AUX_DATA_DIR, "annotations", "tf_symbols_list.txt"), save_output=True, verbose=True)
+
+        for run in range(3):
+            infer_GRN_edges(input_data_file=os.path.join(OUTPUT_STORAGE_DIR, "pseudotime", "PT_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"), tf_list_file=os.path.join(AUX_DATA_DIR, "annotations", "tf_symbols_list.txt"), min_runs=10, save_output=True, output_prefix=f"GRN_edges_run{run}", verbose=True)
+
+
 
         purge_tempfiles()
         sys.exit(0)

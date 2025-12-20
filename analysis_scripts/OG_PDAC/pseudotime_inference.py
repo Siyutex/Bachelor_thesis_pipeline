@@ -214,7 +214,7 @@ def filter_switches(adata, layer, flavor, seed: int = 42, bic_threshold: int = 1
         bic1 = gmm1.bic(X)
         
         # k=2 GMM
-        gmm2 = GaussianMixture(n_components=2, random_state=seed, n_init=5).fit(X)
+        gmm2 = GaussianMixture(n_components=2, random_state=seed, n_init=1).fit(X)
         bic2 = gmm2.bic(X)
         
         # Store BICs in a dictionary format for this gene
@@ -248,6 +248,13 @@ def filter_switches(adata, layer, flavor, seed: int = 42, bic_threshold: int = 1
 
 
 def main(input_data_file, output_data_dir, origin_clade, flavor, layer, smoothe_expression, find_switches, bic_threshold, mean_threshold):
+
+    # define seed for reproducibility
+    np.random.seed(42)
+
+    # define vprint
+    vprint = hf.make_vprint(verbose)
+
 
     adata = sc.read_h5ad(input_data_file)
 
