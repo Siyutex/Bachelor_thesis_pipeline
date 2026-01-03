@@ -114,8 +114,8 @@ output across 3 runs needs to be like this:
 	-> passes all checks, expression matches for log1p
 
 - pseudotime_inference.py
-    -> passes all chekcs, expression matches for log1p
+    -> passes all checks (even with switch selection), expression matches for log1p
 
 - GRN_edge_inference.py
-    -> visual inspection of 3 different run's edge sets indicates determinism
+    -> jaccard metric = 1 (100% overlap) between 3 identical runs, + venn diagram = circle
 	

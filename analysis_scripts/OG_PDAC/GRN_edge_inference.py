@@ -23,6 +23,8 @@ import dask
 dask.config.set({"dataframe.query-planning": False}) # need to not get import errors
 from arboreto.algo import grnboost2
 import json
+import multiprocessing
+from dask.distributed import Client, LocalCluster
 
 
 class StabilityTracker:
@@ -182,6 +184,23 @@ if __name__ == "__main__":
     # get TF list
     tf_ensg_list = get_tf_ensg_list(adata, tf_list_file) if tf_list_file is not None else "all"
 
+    # initialize cluster / client
+    # Detect available cores. 
+    try:
+        cpus_available = int(os.environ.get("SLURM_CPUS_PER_TASK", multiprocessing.cpu_count()))
+    except (TypeError, ValueError):
+        cpus_available = multiprocessing.cpu_count()
+    vprint(f"Detected {cpus_available} CPUs available for this run.")
+
+    # Initialize the cluster using all available cores
+    cluster = LocalCluster(
+        n_workers=cpus_available, 
+        threads_per_worker=1,
+        dashboard_address=None  # Disabling dashboard can prevent port-hangs in HPC nodes
+    )
+    client = Client(cluster)
+
+
     tracker = StabilityTracker(convergence_threshold=convergence_threshold, top_n=top_n_regulators, min_runs=min_runs, min_stability=min_stability)
     while tracker.converged == False:
         # subsrample the dataframe randomly (adata.shape[0] random samples WITH replacement = bootstrapping)
@@ -197,7 +216,7 @@ if __name__ == "__main__":
 
         # run GRN inference (^2 compute time, 2324 genes take 2:40 minutes, cells do not seem to affect runtime)
         vprint("Running GRN inference...")
-        grn = grnboost2(subsample_df, verbose=verbose, tf_names=tf_ensg_list, seed=42)
+        grn = grnboost2(subsample_df, verbose=verbose, tf_names=tf_ensg_list, seed=42, client_or_address=client)
 
         # Calculate the 95th percentile threshold of the 'importance' column
         importance_threshold = grn['importance'].quantile(0.95)
@@ -218,6 +237,9 @@ if __name__ == "__main__":
         # update tracker with result from current bootsrapping run
         tracker.add_run(TF_list)
 
+    # clean up cluster
+    client.close()
+    cluster.close()
     
     if tracker.converged == True:
         final_selection = tracker.get_final_selection()
