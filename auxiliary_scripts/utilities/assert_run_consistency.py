@@ -13,6 +13,8 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
+import json
+from matplotlib_venn import venn3
 
 
 def load_obsname_dict(file_list: list[str]):
@@ -841,13 +843,84 @@ def evaluate_TS_consistency(dir: str):
     print(f"Relative amount of consistently labelled non-transitional cells: {len(consistent_non_TS_cells)/len(all_cell_IDs)}")
 
     
+
+
+
+
+def evaluate_edge_consistency(directory_path):
+    """
+    Take 3 json files with edges from differnt GRN edge inference runs.
+    Compute pairwise and global jaccard similarity + create venn diagram of edge overlap.
+    """
+
+
+    def load_edges_from_json(filepath):
+        """
+        Parses the JSON and flattens it into a set of directed edge tuples.
+        Example: {"Source": ["T1", "T2"]} -> {("Source", "T1"), ("Source", "T2")}
+        """
+        edges = set()
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+            for source, targets in data.items():
+                for target in targets:
+                    edges.add((source, target))
+        return edges
+
+    def calculate_metrics(sets_list, filenames):
+        # Pairwise Jaccard for reference
+        print("--- Pairwise Jaccard Similarity ---")
+        for i in range(len(sets_list)):
+            for j in range(i + 1, len(sets_list)):
+                s1, s2 = sets_list[i], sets_list[j]
+                intersection = len(s1.intersection(s2))
+                union = len(s1.union(s2))
+                jaccard = intersection / union if union > 0 else 0
+                print(f"Run_{i} vs Run_{j}: {jaccard:.4f}")
+
+        # Global Jaccard: (A & B & C) / (A | B | C)
+        global_intersection = set.intersection(*sets_list)
+        global_union = set.union(*sets_list)
+        global_jaccard = len(global_intersection) / len(global_union) if global_union else 0
+        
+        print("\n--- Global Metrics ---")
+        print(f"Global Jaccard (Intersection of all / Union of all): {global_jaccard:.4f}")
+        return global_jaccard
+
+    def plot_grn_venn(sets_list, filenames):
+        plt.figure(figsize=(10, 8))
+        # Create the Venn diagram
+        v = venn3(sets_list, set_labels=('Run 1', 'Run 2', 'Run 3'))
+        
+        plt.title("Edge Overlap Between GRN Runs", fontsize=16)
+        plt.savefig(os.path.join(directory_path, "grn_venn.png"))
+
+
+    # Get first 3 json files
+    files = [f for f in os.listdir(directory_path) if f.endswith('.json')][:3]
+    
+    if len(files) < 3:
+        print(f"Found {len(files)} files. This script requires exactly 3 for the Venn diagram.")
+        return
+
+    edge_sets = []
+    for file in files:
+        full_path = os.path.join(directory_path, file)
+        edge_sets.append(load_edges_from_json(full_path))
+        print(f"Loaded {len(edge_sets[-1])} edges from {file}")
+    print("\n")
+
+    calculate_metrics(edge_sets, files)
+    plot_grn_venn(edge_sets, files)
+
+
 if __name__ == "__main__":
 
     print("starting script...")
 
-    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime"
+    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/GRN_edges"
     #run_all_h5ad_checks(dir=dir, n_outputs=1, file_name=None, layer="log1p")
-    run_all_h5ad_checks(dir=dir, layer="log1p")
+    evaluate_edge_consistency(dir)
     
 
     
