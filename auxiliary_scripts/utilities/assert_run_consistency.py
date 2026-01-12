@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import json
 from matplotlib_venn import venn3
+from typing import Literal
 
 
 def load_obsname_dict(file_list: list[str]):
@@ -847,10 +848,19 @@ def evaluate_TS_consistency(dir: str):
 
 
 
-def evaluate_edge_consistency(directory_path):
+def evaluate_set_consistency(directory_path, set_type: Literal["edges", "var_names", "obs_names"] ):
     """
+    For set_type = "edges":
     Take 3 json files with edges from differnt GRN edge inference runs.
     Compute pairwise and global jaccard similarity + create venn diagram of edge overlap.
+
+    For set_type = "var_names":
+    Take 3 h5ad files with variable names from different pipeline runs.
+    Compute pairwise and global jaccard similarity + create venn diagram of variable name overlap.
+
+    For set_type = "obs_names":
+    Take 3 h5ad files with observation names from different pipeline runs.
+    Compute pairwise and global jaccard similarity + create venn diagram of observation name overlap.
     """
 
 
@@ -866,6 +876,14 @@ def evaluate_edge_consistency(directory_path):
                 for target in targets:
                     edges.add((source, target))
         return edges
+    
+    def load_var_names_from_h5ad(filepath):
+        ad = sc.read_h5ad(filepath)
+        return set(ad.var_names)
+    
+    def load_obs_names_from_h5ad(filepath):
+        ad = sc.read_h5ad(filepath)
+        return set(ad.obs_names)
 
     def calculate_metrics(sets_list, filenames):
         # Pairwise Jaccard for reference
@@ -892,35 +910,39 @@ def evaluate_edge_consistency(directory_path):
         # Create the Venn diagram
         v = venn3(sets_list, set_labels=('Run 1', 'Run 2', 'Run 3'))
         
-        plt.title("Edge Overlap Between GRN Runs", fontsize=16)
-        plt.savefig(os.path.join(directory_path, "grn_venn.png"))
+        plt.savefig(os.path.join(directory_path, "venn.png"))
 
 
-    # Get first 3 json files
-    files = [f for f in os.listdir(directory_path) if f.endswith('.json')][:3]
+    # Get first 3 json or h5ad files
+    files = [f for f in os.listdir(directory_path) if f.endswith(".json") or f.endswith(".h5ad")][:3]
     
     if len(files) < 3:
         print(f"Found {len(files)} files. This script requires exactly 3 for the Venn diagram.")
         return
 
-    edge_sets = []
+    sets = []
     for file in files:
         full_path = os.path.join(directory_path, file)
-        edge_sets.append(load_edges_from_json(full_path))
-        print(f"Loaded {len(edge_sets[-1])} edges from {file}")
+        if set_type == "var_names":
+            sets.append(load_var_names_from_h5ad(full_path))
+        elif set_type == "obs_names":
+            sets.append(load_obs_names_from_h5ad(full_path))
+        elif set_type == "edges":
+            sets.append(load_edges_from_json(full_path))
+        print(f"Loaded {len(sets[-1])} elements from {file}")
     print("\n")
 
-    calculate_metrics(edge_sets, files)
-    plot_grn_venn(edge_sets, files)
+    calculate_metrics(sets, files)
+    plot_grn_venn(sets, files)
 
 
 if __name__ == "__main__":
 
     print("starting script...")
 
-    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/tree"
+    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated"
     #run_all_h5ad_checks(dir=dir, n_outputs=1, file_name=None, layer="log1p")
-    evaluate_TS_consistency(dir=dir)
+    evaluate_set_consistency(directory_path=dir, set_type="obs_names")
     
 
     
