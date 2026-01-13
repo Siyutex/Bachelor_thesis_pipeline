@@ -1,0 +1,4 @@
+per sample (from subsample dir), we ran tree once with euclidean and once with correlation
+
+it can also be observed that there is a difference in results between otherwise identical runs if a +
+different distance metric is used (parameter dependance)

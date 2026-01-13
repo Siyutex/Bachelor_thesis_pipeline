@@ -1273,12 +1273,23 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             output_path_list = isolate_and_HVGs(h5ad_file, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={}, save_output=True, verbose=True)
             cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cancer_state_inferred_scMF" "cnv_score", "cnv_clade"], layers=["log1p"], projection="UMAP", output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
         """
+        r"""
         for run, clades in zip(os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "tree")), [[18,9], [21,26], [26,19]]):
             if os.path.isdir(os.path.join(OUTPUT_STORAGE_DIR, "tree", run)):
                 continue
             output_path_list = isolate_and_HVGs(os.path.join(OUTPUT_STORAGE_DIR, "tree", run), main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, preservation_dict={"cnv_clade":clades}, save_output=True, verbose=True)
             output_path_list = infer_pseudotime(input_data_file=output_path_list[0], origin_clade=clades[0], save_output=True, verbose=True)
             infer_GRN_edges(input_data_file=output_path_list[0], tf_list_file=os.path.join(AUX_DATA_DIR, "annotations", "tf_symbols_list.txt"), verbose=True, save_output=True)
+        """
+
+        for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "subsampled")):
+            output_path_list = get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "subsampled", file), cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state_inferred_scMF", transition_entropy_threshold=0.8, save_output=True, verbose=True, output_prefix="transition_clades_scMF")
+            for file in output_path_list:
+                if ".nwk" in file:
+                    tree_file = file
+                elif ".h5ad" in file:
+                    h5ad_file = file
+            output_path_list = isolate_and_HVGs(h5ad_file, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, preservation_dict={}, save_output=True, verbose=True)
 
 
         purge_tempfiles()

@@ -1,0 +1,7 @@
+these files are to test whether the jitter added to make correlation distance computable fucks up 
+the TS consistency (should be identical venn diags in both cases if it is not an issue)
+
+both runs were created from scMF_run0_PDAC_ductal_cell.h5ad
+the only difference was that no jitter was added for the "no_jitter" run
+
+venns are identical -> not an issue

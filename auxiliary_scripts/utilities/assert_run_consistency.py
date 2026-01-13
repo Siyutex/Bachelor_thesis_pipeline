@@ -14,7 +14,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import json
-from matplotlib_venn import venn3
+from matplotlib_venn import venn3, venn2
 from typing import Literal
 
 
@@ -908,7 +908,13 @@ def evaluate_set_consistency(directory_path, set_type: Literal["edges", "var_nam
     def plot_grn_venn(sets_list, filenames):
         plt.figure(figsize=(10, 8))
         # Create the Venn diagram
-        v = venn3(sets_list, set_labels=('Run 1', 'Run 2', 'Run 3'))
+        if len(sets_list) == 3:
+            v = venn3(sets_list, set_labels=('Run 1', 'Run 2', 'Run 3'))
+        elif len(sets_list) == 2:
+            v = venn2(sets_list, set_labels=('Run 1', 'Run 2'))
+        else:
+            raise ValueError("Unsupported number of sets for Venn diagram.")
+        
         
         plt.savefig(os.path.join(directory_path, "venn.png"))
 
@@ -916,9 +922,13 @@ def evaluate_set_consistency(directory_path, set_type: Literal["edges", "var_nam
     # Get first 3 json or h5ad files
     files = [f for f in os.listdir(directory_path) if f.endswith(".json") or f.endswith(".h5ad")][:3]
     
-    if len(files) < 3:
-        print(f"Found {len(files)} files. This script requires exactly 3 for the Venn diagram.")
-        return
+    if len(files) == 2:
+        print(f"Found {len(files)} files. Creating 2 - set Venn diagram.")
+    elif len(files) == 3:
+        print(f"Found {len(files)} files. Creating 3 - set Venn diagram.")
+    else:
+        print(f"Found {len(files)} files. Cannot create Venn diagram.")
+        return # leave function
 
     sets = []
     for file in files:
@@ -940,7 +950,7 @@ if __name__ == "__main__":
 
     print("starting script...")
 
-    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated"
+    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/gambere"
     #run_all_h5ad_checks(dir=dir, n_outputs=1, file_name=None, layer="log1p")
     evaluate_set_consistency(directory_path=dir, set_type="obs_names")
     

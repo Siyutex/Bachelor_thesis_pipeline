@@ -1,0 +1,5 @@
+--- Pairwise Jaccard Similarity ---
+Run_0 vs Run_1: 1.0000
+
+--- Global Metrics ---
+Global Jaccard (Intersection of all / Union of all): 1.0000

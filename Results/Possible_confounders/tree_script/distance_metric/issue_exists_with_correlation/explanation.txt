@@ -1,0 +1,1 @@
+correlation as distance metric instead of euclidean, and ts inconsistency still exists (so its not a featuer of euclidean dist and likely the neighbour graph topology)
