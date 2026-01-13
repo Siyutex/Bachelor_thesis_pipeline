@@ -1,0 +1,12 @@
+standard settings for bc script results:
+
+
+all genes used
+pretrained model used
+seed: 69
+batch to correct to: batch_keys[0]
+library size: 10000
+
+
+seed test: changed seed to 42
+batch to correct to test: changed to batch_keys[1]

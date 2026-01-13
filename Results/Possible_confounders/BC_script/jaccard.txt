@@ -1,0 +1,18 @@
+Found 3 files. Creating 3 - set Venn diagram.
+Loaded 306 elements from isolated_no_changes_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad
+Loaded 232 elements from isolated_BC_seed_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad
+Loaded 85 elements from isolated_BC_origin_batch_test_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad
+
+
+--- Pairwise Jaccard Similarity ---
+Run_0 vs Run_1: 0.2227
+Run_0 vs Run_2: 0.0983
+Run_1 vs Run_2: 0.0497
+
+--- Global Metrics ---
+Global Jaccard (Intersection of all / Union of all): 0.0246
+
+
+"Run_0" = no_changes = standard_settings
+"Run_1" = seed test (seed = 42)
+"Run_2" = origin batch test (bach_keys[1])

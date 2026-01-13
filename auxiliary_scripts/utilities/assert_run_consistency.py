@@ -950,7 +950,7 @@ if __name__ == "__main__":
 
     print("starting script...")
 
-    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/gambere"
+    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/bc_params_test"
     #run_all_h5ad_checks(dir=dir, n_outputs=1, file_name=None, layer="log1p")
     evaluate_set_consistency(directory_path=dir, set_type="obs_names")
     

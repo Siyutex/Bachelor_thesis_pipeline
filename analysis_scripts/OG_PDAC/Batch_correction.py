@@ -17,7 +17,7 @@ import random
 import torch
 
 
-def set_scvi_seed(seed=42):
+def set_scvi_seed(seed):
     scvi.settings.seed = seed # uses a setter in scvi
     # np.random.seed(seed)
     random.seed(seed) # this is also done in scvi

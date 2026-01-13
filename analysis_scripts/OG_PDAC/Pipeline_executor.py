@@ -1262,6 +1262,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         """
 
         # subsample_cells(file_path=os.path.join(OUTPUT_STORAGE_DIR, "scMF", "scMF_run0_PDAC_ductal_cell.h5ad"), fraction=0.6, n_samples=3, output_dir=os.path.join(OUTPUT_STORAGE_DIR, "subsampled"))
+        
+        # identify clades to keep for pseudotime
         r"""        
         for run in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "subsampled")):
             output_path_list = get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "subsampled", run), cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state_inferred", transition_entropy_threshold=0.8, save_output=True, verbose=True)
@@ -1273,6 +1275,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             output_path_list = isolate_and_HVGs(h5ad_file, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={}, save_output=True, verbose=True)
             cluster_and_plot(["projections"], input_data_file=output_path_list[0], obs_annotations=["cancer_state", "cancer_state_inferred", "cancer_state_inferred_tree", "cancer_state_inferred_scMF" "cnv_score", "cnv_clade"], layers=["log1p"], projection="UMAP", output_storage_subdir="clade_selection", save_output=True, verbose=True, show=False)
         """
+
+        # tree output -> grn edges
         r"""
         for run, clades in zip(os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "tree")), [[18,9], [21,26], [26,19]]):
             if os.path.isdir(os.path.join(OUTPUT_STORAGE_DIR, "tree", run)):
@@ -1282,6 +1286,8 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             infer_GRN_edges(input_data_file=output_path_list[0], tf_list_file=os.path.join(AUX_DATA_DIR, "annotations", "tf_symbols_list.txt"), verbose=True, save_output=True)
         """
 
+        # verify ts consistency under different conditions
+        r"""
         for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "subsampled")):
             output_path_list = get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "subsampled", file), cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state_inferred_scMF", transition_entropy_threshold=0.8, save_output=True, verbose=True, output_prefix="transition_clades_scMF")
             for file in output_path_list:
@@ -1290,7 +1296,20 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
                 elif ".h5ad" in file:
                     h5ad_file = file
             output_path_list = isolate_and_HVGs(h5ad_file, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, preservation_dict={}, save_output=True, verbose=True)
+        """
 
+        # check BC condition's effects on TS consistency
+        #output_path_list = correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_run0_PDAC.h5ad"), max_considered_genes="all", save_output=False, verbose=True, output_prefix="batch_corrected_seed_test")
+        #output_path_list = infer_CNVs(output_path_list[0], corrected_representation="X_scANVI_corrected", reference_genome_path=os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), cell_type="ductal_cell", save_output=False, verbose=True, input_prefix="batch_corrected_seed_test", output_prefix="CNV_inferred_seed_test")
+        #output_path_list = reduce_data(output_path_list[0], layers_to_remove=["X", "X_scANVI_corrected_gene_values_cnv", "X_scVI_corrected"], save_output=False, verbose=True, input_prefix="CNV_inferred_seed_test", output_prefix="reduced_seed_test")
+        output_path_list = get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "CNV", "CNV_inferred_run0_PDAC_ductal_cell.h5ad"), cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state_inferred", transition_entropy_threshold=0.8, save_output=True, verbose=True, input_prefix="reduced_seed_test", output_prefix="transition_clades_no_changes")
+        for file in output_path_list:
+            if ".nwk" in file:
+                tree_file = file
+            elif ".h5ad" in file:
+                h5ad_file = file
+        output_path_list = isolate_and_HVGs(h5ad_file, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, preservation_dict={}, save_output=True, verbose=True)
+        
 
         purge_tempfiles()
         sys.exit(0)

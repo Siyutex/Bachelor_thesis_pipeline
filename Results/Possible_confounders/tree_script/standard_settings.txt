@@ -1,0 +1,7 @@
+standard settings for tree script for results are:
+cancer metric: CSI
+distance metric: euclidean
+clades: 30
+matrix: X_scANVI_corrected_cnv
+entropy threshod: 0.8
+seed (script internal): 42 
