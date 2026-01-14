@@ -219,6 +219,7 @@ def subsample_cells(file_path, fraction, n_samples, output_dir):
     
     # subsample
     for i in range(n_samples):
+        print(f"Subsampling {i}")
         np.random.shuffle(mask) # shuffle to keep a random set of cells
         ss_adata = adata[mask,:].copy()
         ss_adata.write(os.path.join(output_dir, f"sample_{i}.h5ad"), compression="gzip")
@@ -1299,6 +1300,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         """
 
         # check BC condition's effects on TS consistency
+        r"""
         #output_path_list = correct_batch_effects(os.path.join(OUTPUT_STORAGE_DIR, "aggregated", "aggregated_run0_PDAC.h5ad"), max_considered_genes="all", save_output=False, verbose=True, output_prefix="batch_corrected_seed_test")
         #output_path_list = infer_CNVs(output_path_list[0], corrected_representation="X_scANVI_corrected", reference_genome_path=os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), cell_type="ductal_cell", save_output=False, verbose=True, input_prefix="batch_corrected_seed_test", output_prefix="CNV_inferred_seed_test")
         #output_path_list = reduce_data(output_path_list[0], layers_to_remove=["X", "X_scANVI_corrected_gene_values_cnv", "X_scVI_corrected"], save_output=False, verbose=True, input_prefix="CNV_inferred_seed_test", output_prefix="reduced_seed_test")
@@ -1309,7 +1311,17 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             elif ".h5ad" in file:
                 h5ad_file = file
         output_path_list = isolate_and_HVGs(h5ad_file, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, preservation_dict={}, save_output=True, verbose=True)
-        
+        """
+
+        for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "subsampled", "jaccard_convergency_check")):
+            output_path_list = get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "subsampled", "jaccard_convergency_check", file), cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state_inferred", transition_entropy_threshold=0.8, save_output=False, verbose=False, output_prefix="transition_clades_jaccard_convergence")
+            for file in output_path_list:
+                if ".nwk" in file:
+                    tree_file = file 
+                elif ".h5ad" in file:
+                    h5ad_file = file
+            output_path_list = isolate_and_HVGs(h5ad_file, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, preservation_dict={}, save_output=True, verbose=True)
+
 
         purge_tempfiles()
         sys.exit(0)

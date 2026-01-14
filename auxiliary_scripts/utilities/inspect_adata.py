@@ -45,20 +45,19 @@ if __name__ == "__main__":
 
     layer_to_check = None # check library sizes for this layer
     file_locations = [
-        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/scMF/scMF_CNV_inferred_shin.h5ad",
+    r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/tree/bc_params_test/transition_clades_no_changes_CNV_inferred_run0_PDAC_ductal_cell.h5ad",
     ]
 
 
 
     obs_dict = {
-        "cancer_state": ["cancerous"],
-        "cancer_state_inferred": ["cancerous"],
-        "cancer_state_inferred_scMF": ["cancerous"]
+        "cancer_state_inferred_tree": ["transitional"],
     }
 
     for path in file_locations:
         adata = sc.read_h5ad(path)
         check_obs_percentage(adata, obs_dict=obs_dict)
+        check_n_obs(adata)
         
 
 

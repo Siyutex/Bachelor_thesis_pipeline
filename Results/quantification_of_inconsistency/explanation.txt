@@ -1,0 +1,17 @@
+- use pairwise jaccard instead of total jaccard (total will always go to 0 if pairwise is < 1; exponental decay)
+
+- pairwise jaccard, for all possible pairs, take average
+
+- do this for 1, 2, 3, ..., 10 subsamples -> 90 pairs total
+
+- fit function and find limit
+
+- limit should be the real expected jaccard similarity of any 2 random subsamples (60%ss)
+
+- compare to perfect algo (independant of ss size and TS density) -> 0.42 jaccard similarity
+- compare to random algo (60%ss, 13.08% TS density (based on full dataset with no subsample, run0)) -> 0.0408 jaccard similarity
+
+- calculate percent performance (percentage of perfect algo) -> 22.5% of ideal performance
+
+
+(extra notes see paper / photo)

@@ -16,6 +16,7 @@ from matplotlib.colors import ListedColormap
 import json
 from matplotlib_venn import venn3, venn2
 from typing import Literal
+from scipy.optimize import curve_fit
 
 
 def load_obsname_dict(file_list: list[str]):
@@ -946,13 +947,123 @@ def evaluate_set_consistency(directory_path, set_type: Literal["edges", "var_nam
     plot_grn_venn(sets, files)
 
 
+def find_consistency_limit(dir: str, set_type: Literal["edges", "var_names", "obs_names"] ):
+
+
+    def load_edges_from_json(filepath):
+        """
+        Parses the JSON and flattens it into a set of directed edge tuples.
+        Example: {"Source": ["T1", "T2"]} -> {("Source", "T1"), ("Source", "T2")}
+        """
+        edges = set()
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+            for source, targets in data.items():
+                for target in targets:
+                    edges.add((source, target))
+        return edges
+    
+    def load_var_names_from_h5ad(filepath):
+        ad = sc.read_h5ad(filepath)
+        return set(ad.var_names)
+    
+    def load_obs_names_from_h5ad(filepath):
+        ad = sc.read_h5ad(filepath)
+        return set(ad.obs_names)
+    
+    files = [f for f in os.listdir(dir) if f.endswith(".json") or f.endswith(".h5ad")]
+    sets = []
+    for file in files:
+        full_path = os.path.join(dir, file)
+        if set_type == "var_names":
+            sets.append(load_var_names_from_h5ad(full_path))
+        elif set_type == "obs_names":
+            sets.append(load_obs_names_from_h5ad(full_path))
+        elif set_type == "edges":
+            sets.append(load_edges_from_json(full_path))
+        print(f"Loaded {len(sets[-1])} elements from {file}")
+
+    def avg_pairwise_jaccard(set_list):
+        jaccard_list = []
+        for i in range(len(set_list)):
+            for j in range(i + 1, len(set_list)):
+                s1, s2 = set_list[i], set_list[j]
+                intersection = len(s1.intersection(s2))
+                union = len(s1.union(s2))
+                jaccard = intersection / union if union > 0 else 0
+                jaccard_list.append(jaccard)
+        
+        avg = sum(jaccard_list) / len(jaccard_list)
+        return avg
+    
+
+    def fit_jaccard_limit(avg_jaccards):
+        """
+        Fits a growth function to average Jaccard scores to find the limit L.
+        Model: f(n) = L - a * exp(-b * n)
+        """
+        n_values = np.arange(2, len(avg_jaccards) + 2)
+        y_values = np.array(avg_jaccards)
+
+        # Growth model where L is the upper asymptote
+        def growth_model(n, L, a, b):
+            return L - a * np.exp(-b * n)
+
+        # Initial guesses:
+        # L: slightly higher than the max observed value
+        # a: the difference between the limit and the starting point
+        # b: a small growth rate
+        p0 = [y_values[-1] + 0.05, y_values[-1] - y_values[0], 0.1]
+        
+        # Constraints: L must be between 0 and 1
+        bounds = (0, [1.0, 1.0, np.inf])
+        
+        try:
+            params, _ = curve_fit(growth_model, n_values, y_values, p0=p0, bounds=bounds)
+            L, a, b = params
+        except Exception as e:
+            print(f"Fitting failed: {e}")
+            return None
+
+        # --- Visualization ---
+        plt.figure(figsize=(10, 6))
+        plt.scatter(n_values, y_values, color='red', label='Observed Avg Jaccard')
+        
+        # Generate curve
+        n_smooth = np.linspace(2, len(avg_jaccards) + 5, 100)
+        plt.plot(n_smooth, growth_model(n_smooth, L, a, b), 'b--', 
+                label=f'Fit Curve (Limit L ≈ {L:.4f})')
+        
+        plt.axhline(y=L, color='green', linestyle=':', label=f'Asymptote (L={L:.4f})')
+        plt.title('Consistency Limit: Average Pairwise Jaccard Convergence')
+        plt.xlabel('Number of Sets (n)')
+        plt.ylabel('Average Jaccard')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.savefig(os.path.join(dir, "jaccard_convergence.png"))
+
+        return L
+
+    # track avg pariwise jaccard from 1 to n sets
+    avg_jaccard_list = []
+    for i in range(1,len(sets)): # iterate from 1 to last index of list
+        avg_jaccard_list.append(avg_pairwise_jaccard(sets[:i+1])) # compare the first i+1 sets (but does not break at end)
+
+    # find limit
+    limit = fit_jaccard_limit(avg_jaccard_list)
+    print(f"Limit: {limit}")
+    
+
+
+
+
 if __name__ == "__main__":
 
     print("starting script...")
 
-    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/bc_params_test"
+    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/jaccard_convergence_check"
     #run_all_h5ad_checks(dir=dir, n_outputs=1, file_name=None, layer="log1p")
-    evaluate_set_consistency(directory_path=dir, set_type="obs_names")
+    find_consistency_limit(dir=dir, set_type="obs_names")
     
 
     
