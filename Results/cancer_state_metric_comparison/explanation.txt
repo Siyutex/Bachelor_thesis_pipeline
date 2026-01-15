@@ -1,0 +1,7 @@
+Run1= CSI_scMF
+Run2= CS
+Run3= CSI
+
+
+No subsampling, just isolated cancerous / non_cancerous cells from each group and looked at overlap
+turns it cancer annotation is quite good non_cancer annotation is not great (which it needs to be for ts annotation)

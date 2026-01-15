@@ -1061,9 +1061,10 @@ if __name__ == "__main__":
 
     print("starting script...")
 
-    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/jaccard_convergence_check"
+    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/cancer_metric_overlap"
     #run_all_h5ad_checks(dir=dir, n_outputs=1, file_name=None, layer="log1p")
-    find_consistency_limit(dir=dir, set_type="obs_names")
+    for x in ["cancerous", "non_cancerous"]:
+        evaluate_set_consistency(directory_path=os.path.join(dir, x), set_type="obs_names")
     
 
     

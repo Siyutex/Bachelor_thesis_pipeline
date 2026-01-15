@@ -1,0 +1,30 @@
+Cancerous:
+Found 3 files. Creating 3 - set Venn diagram.
+Loaded 2024 elements from isolated_cancer_state_inferred_scMF_cancerous_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_scMF_is_['cancerous'].h5ad
+Loaded 1978 elements from isolated_cancer_state_cancerous_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_is_['cancerous'].h5ad
+Loaded 1869 elements from isolated_cancer_state_inferred_cancerous_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_is_['cancerous'].h5ad
+
+
+--- Pairwise Jaccard Similarity ---
+Run_0 vs Run_1: 0.7147
+Run_0 vs Run_2: 0.6824
+Run_1 vs Run_2: 0.8163
+
+--- Global Metrics ---
+Global Jaccard (Intersection of all / Union of all): 0.6170
+
+
+non_cancerous:
+Found 3 files. Creating 3 - set Venn diagram.
+Loaded 315 elements from isolated_cancer_state_inferred_scMF_non_cancerous_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_scMF_is_['non_cancerous'].h5ad
+Loaded 361 elements from isolated_cancer_state_non_cancerous_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_is_['non_cancerous'].h5ad
+Loaded 470 elements from isolated_cancer_state_inferred_non_cancerous_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_is_['non_cancerous'].h5ad
+
+
+--- Pairwise Jaccard Similarity ---
+Run_0 vs Run_1: 0.0075
+Run_0 vs Run_2: 0.0329
+Run_1 vs Run_2: 0.3623
+
+--- Global Metrics ---
+Global Jaccard (Intersection of all / Union of all): 0.0022

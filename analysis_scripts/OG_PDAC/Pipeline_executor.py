@@ -1313,14 +1313,9 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         output_path_list = isolate_and_HVGs(h5ad_file, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, preservation_dict={}, save_output=True, verbose=True)
         """
 
-        for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "subsampled", "jaccard_convergency_check")):
-            output_path_list = get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "subsampled", "jaccard_convergency_check", file), cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state_inferred", transition_entropy_threshold=0.8, save_output=False, verbose=False, output_prefix="transition_clades_jaccard_convergence")
-            for file in output_path_list:
-                if ".nwk" in file:
-                    tree_file = file 
-                elif ".h5ad" in file:
-                    h5ad_file = file
-            output_path_list = isolate_and_HVGs(h5ad_file, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, preservation_dict={}, save_output=True, verbose=True)
+        for state in ["cancerous", "non_cancerous"]:
+            for metric in ["cancer_state", "cancer_state_inferred", "cancer_state_inferred_scMF"]:
+                isolate_and_HVGs(os.path.join(OUTPUT_STORAGE_DIR, "scMF", "scMF_run0_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", add_log1p=False, max_considered_genes=1000, isolation_dict={metric: [state]}, preservation_dict={}, save_output=True, verbose=False, input_prefix="scMF", output_prefix=f"isolated_{metric}_{state}")
 
 
         purge_tempfiles()
