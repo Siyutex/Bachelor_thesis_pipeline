@@ -1151,7 +1151,7 @@ def get_pairwise_ari(directory, resolution=0.5, n_neighbors=15, n_comps=50):
         print(f"\nPairwise ARI statistics for {directory}:")
         print(df_results['ari'].describe())
     
-    print(f"Cluster statistics"):
+    print(f"Cluster statistics")
     print(f"Mean cluster count: {np.mean(cluster_counts)}")
     print(f"Std cluster count: {np.std(cluster_counts)}")
     print(f"Median cluster count: {np.median(cluster_counts)}")
