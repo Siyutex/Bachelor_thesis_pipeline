@@ -1,0 +1,38 @@
+We compared ARI (Adjusted Rand Index) for the PDAC and Shin data. identical processing other than marker sets for cell types
+10 subsamples each, pairwise ARI between 2 subsamples for all pairwise (60% subsamples)
+
+PDAC:
+Pairwise ARI statistics for /proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/subsampled/PDAC/jaccard_convergency_check:
+count    45.000000
+mean      0.597280
+std       0.117160
+min       0.388335
+25%       0.526051
+50%       0.577553
+75%       0.690380
+max       0.845491
+
+
+Shin:
+Pairwise ARI statistics for /proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/subsampled/Shin:
+count    45.000000
+mean      0.662865
+std       0.108458
+min       0.430278
+25%       0.583107
+50%       0.647387
+75%       0.751484
+max       0.849855
+
+we have a difference not super large, but noticeable. Shin has more consistent clusters than PDAC (even though the noise is similar according to hopkins)
+So this indicates it is a colon / organoid intrinsic property that makes clusters more stable. Colon data has clearer boundries between subtypes
+
+
+so we have:
+tree inconsistency
+noise in both datasets (hopkins)
+slightly higher ARI for organoids
+
+these together, even though each one might be somewhat parameter dependant (I tested parameters for tree so there it is no issue)
+say that there must be some sort of topolgical difference that PDAC has which colon organoids don't have that causes the inconsistency-
+-> avoiding toplogy dependant methods (neighbours) altogether could this be a promising fix for the method

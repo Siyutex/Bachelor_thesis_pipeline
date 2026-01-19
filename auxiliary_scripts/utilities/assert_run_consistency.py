@@ -17,6 +17,8 @@ import json
 from matplotlib_venn import venn3, venn2
 from typing import Literal
 from scipy.optimize import curve_fit
+from sklearn.metrics import adjusted_rand_score
+from itertools import combinations
 
 
 def load_obsname_dict(file_list: list[str]):
@@ -1054,6 +1056,107 @@ def find_consistency_limit(dir: str, set_type: Literal["edges", "var_names", "ob
     print(f"Limit: {limit}")
     
 
+def get_pairwise_ari(directory, resolution=0.5, n_neighbors=15, n_comps=50):
+    """
+    ARI = adjusted rand index
+
+    ARI = 1 means that a particular cell gets assigned in a cluster with the same other cells across subsampling runs
+    ARI = 0 means that cells get assigned to cluster randomly over subsampling runs
+
+    This can be used to evauate large scale topological consistency of a dataset (eg Shin et al data might be less noisy -> subsampling does not affect large scale clustering as much -> more consistent tree -> clades -> TS)
+
+    It basically works by getting a vector for each of 2 runs where the index = the cell and the value = what cluster it is in in that run
+    then it compares for all pairs of cells (n_obs over 2): "If cell A and cell B are in the same cluster (name of cluster does not matter) in run 1, or they also in the same cluster in run 2?"
+    possible results for this (per pair of cells are): in same cluster in both runs, never in same cluster, once serperated and once together
+    in the first 2 cases, we can say that the pair of cells gets consistently clustered together or apart -> agreement
+
+    We then check for this clustering agreement for each pair of cells across the 2 runs
+    then RI = number of agreements / number of cell pairs 
+    1 = perfect agreement between 2 runs
+    0 = random assignment to clusters
+
+    ARI improves this by Adjusting for random noise (randomly distributed cells can also happen to be together / apart in both runs = agreement)
+    so ARI tells us how consistent the clustering (=global topology) is compared to random noise
+
+    We then compute this ARI for all pairs of runs (pairwise ARI) (because ARI over all runs would be super super harsh (almost no cells would consistenly group together over 50 runs))
+    then we take the average
+
+    isi ai shisgamebre di aisklin
+
+    resoltution = resolution of leiden to use for clustering
+    """
+
+    files = [f for f in os.listdir(directory) if f.endswith('.h5ad')]
+    
+    # 1. Clustering Registry: Store only the final labels to save RAM
+    label_registry = {}
+    cluster_counts = []
+    
+    print(f"Processing and clustering {len(files)} files...")
+    
+    for f in files:
+        # Load full file into memory to allow neighbor/leiden computation
+        path = os.path.join(directory, f)
+        adata = sc.read_h5ad(path)
+        adata = hf.matrix_to_anndata(adata, matrix_key="X_scANVI_corrected")
+        
+        # Recalculate neighbors and Leiden on this specific subsample
+        # This ensures the graph is built specifically from the subsampled cells
+        sc.pp.pca(adata, n_comps=n_comps, svd_solver="arpack")
+        sc.pp.neighbors(adata, n_neighbors=n_neighbors, use_rep="X_pca")
+        sc.tl.leiden(adata, resolution=resolution, key_added='temp_cluster')
+        
+        # Store the Series (obs_names -> cluster_id)
+        label_registry[f] = adata.obs['temp_cluster'].copy()
+
+        # get amount of leiden clusters
+        cluster_counts.append(len(adata.obs['temp_cluster'].unique()))
+        
+        # Clean up to keep memory free for the next file
+        del adata
+    
+    # 2. Fast Pairwise ARI calculation
+    results = []
+    pairs = list(combinations(files, 2))
+    print(f"Calculating ARI for {len(pairs)} pairs...")
+
+    for f1, f2 in pairs:
+        labels1 = label_registry[f1]
+        labels2 = label_registry[f2]
+        
+        # Find intersection of cell barcodes
+        common_cells = labels1.index.intersection(labels2.index)
+        
+        # Safety check: ARI requires at least 2 points to form a pair
+        if len(common_cells) < 2:
+            print(f"Skipping pair {f1} and {f2}: insufficient overlap.")
+            continue
+            
+        # Align labels based on the common cells
+        score = adjusted_rand_score(
+            labels1.loc[common_cells], 
+            labels2.loc[common_cells]
+        )
+        
+        results.append({
+            'run_a': f1, 
+            'run_b': f2, 
+            'ari': score, 
+            'n_common': len(common_cells)
+        })
+
+    df_results = pd.DataFrame(results)
+    
+    if not df_results.empty:
+        print(f"\nPairwise ARI statistics for {directory}:")
+        print(df_results['ari'].describe())
+    
+    print(f"Cluster statistics"):
+    print(f"Mean cluster count: {np.mean(cluster_counts)}")
+    print(f"Std cluster count: {np.std(cluster_counts)}")
+    print(f"Median cluster count: {np.median(cluster_counts)}")
+    
+    return df_results
 
 
 
@@ -1061,10 +1164,10 @@ if __name__ == "__main__":
 
     print("starting script...")
 
-    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/cancer_metric_overlap"
-    #run_all_h5ad_checks(dir=dir, n_outputs=1, file_name=None, layer="log1p")
-    for x in ["cancerous", "non_cancerous"]:
-        evaluate_set_consistency(directory_path=os.path.join(dir, x), set_type="obs_names")
+    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/subsampled/PDAC/jaccard_convergency_check"
+    dir2 = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/subsampled/Shin"
+    get_pairwise_ari(dir)
+    get_pairwise_ari(dir2)
     
 
     

@@ -30,8 +30,8 @@ if not os.path.exists(os.path.join(tempfile.gettempdir(),"python")):
 SCRIPT_DIR = os.path.dirname(__file__)  # directory where this script is located
 # list of directories (see choose_pipeline_mode for valid structures for each entry)
 RAW_DATA_DIRS = [    
-                os.path.join(SCRIPT_DIR, "..", "..", "Data","OG_data", "manual_cell_IDs_NCBI","PDAC_cancerous"),
-                os.path.join(SCRIPT_DIR, "..", "..", "Data","OG_data","manual_cell_IDs_NCBI","PDAC_non_cancerous")
+                os.path.join(SCRIPT_DIR, "..", "..", "Data", "Shin_et_al.", "shin_cancerous"),
+                os.path.join(SCRIPT_DIR, "..", "..", "Data", "Shin_et_al.", "shin_non_cancerous"),
                 ]
 OUTPUT_STORAGE_DIR = os.path.join(SCRIPT_DIR, "..", "..", "Data", "output_storage")  # directory for optional permanent storage of indermediate subprocess outputs
 TEMP_DIR = os.path.join(tempfile.gettempdir(),"python") # directory for storage of temporary pipeline files
@@ -1313,9 +1313,21 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         output_path_list = isolate_and_HVGs(h5ad_file, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, preservation_dict={}, save_output=True, verbose=True)
         """
 
-        for state in ["cancerous", "non_cancerous"]:
-            for metric in ["cancer_state", "cancer_state_inferred", "cancer_state_inferred_scMF"]:
-                isolate_and_HVGs(os.path.join(OUTPUT_STORAGE_DIR, "scMF", "scMF_run0_PDAC_ductal_cell.h5ad"), main_layer="X_scANVI_corrected", add_log1p=False, max_considered_genes=1000, isolation_dict={metric: [state]}, preservation_dict={}, save_output=True, verbose=False, input_prefix="scMF", output_prefix=f"isolated_{metric}_{state}")
+        # process shin data (must have access to shin models)
+        r"""
+        use_ensembl_ids = True
+        mode = choose_pipeline_mode(RAW_DATA_DIRS[0])
+        for data_dir in RAW_DATA_DIRS:
+            preprocess_data(data_dir, mode, use_ensembl_ids=use_ensembl_ids, save_output=False, verbose=True, filtering_params=FilteringParameters(min_n_cells_percentage=0, max_n_MADs=None, max_mito_percentage=0.10))
+        annotate_cell_types(os.path.join(TEMP_DIR, "preprocessed"), use_ensembl_ids, os.path.join(AUX_DATA_DIR, "annotations", "marker_genes_colon.json"), model="cellassign", verbose=True, save_output=False)
+        output_path_list = aggregate_batches(os.path.join(TEMP_DIR, "cell_type_annotated"), save_output=False, verbose=True)
+        output_path_list = correct_batch_effects(output_path_list[0], max_considered_genes="all", save_output=False, verbose=True)
+        output_path_list = infer_CNVs(output_path_list[0], corrected_representation="X_scANVI_corrected", reference_genome_path=os.path.join(AUX_DATA_DIR, "annotations", "gencode.v49.annotation.gtf.gz"), cell_type=None, save_output=False, verbose=True)
+        output_path_list = reduce_data(output_path_list[0], input_prefix="CNV_inferred", layers_to_remove=["X", "X_scANVI_corrected_gene_values_cnv", "X_scVI_corrected"], save_output=True, verbose=True)
+        """
+
+        subsample_cells(file_path=os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_shin.h5ad"), fraction=0.6, n_samples=10, output_dir=os.path.join(OUTPUT_STORAGE_DIR, "subsampled", "Shin"))
+
 
 
         purge_tempfiles()

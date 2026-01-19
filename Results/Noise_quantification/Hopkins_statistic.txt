@@ -1,0 +1,17 @@
+both test were run on the reduced datasets with identical processing (only difference is marker sets in annotation and no isolation of cell types in colon organoids)
+PCA perfromed to 50 PCs
+
+
+PDAC (10 hopkins sample median each, 1000 cells):
+Median Hopkins statistic: 0.6203912550899346
+Median Hopkins statistic: 0.6227631844242798
+-> seems consistent
+
+
+Colon organoids (same as pdac)
+Median Hopkins statistic: 0.6335606704447898
+Median Hopkins statistic: 0.6330239064866688
+-> seems consistent
+
+so there is a very slight difference, likely signifcant but nothing major so noise
+likely is not the issue that creates difference in TS consistency

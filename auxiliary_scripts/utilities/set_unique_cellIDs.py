@@ -9,10 +9,10 @@ import os
 
 if __name__ == "__main__":
     # paramteters
-    OUTPUT_DIR = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/unique_cell_ids"
+    OUTPUT_DIR = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/OG_data/Shin_et_al./manual_cell_IDs_shin"
     DIR_LIST = [
-        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/OG_data/NCBI/PDAC_cancerous",
-        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/OG_data/NCBI/PDAC_non_cancerous",
+        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/OG_data/Shin_et_al./shin_cancerous",
+        r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/OG_data/Shin_et_al./shin_non_cancerous",
     ]
     VAR_NAMES = "gene_ids" # gene_ids or gene_symbols
 
