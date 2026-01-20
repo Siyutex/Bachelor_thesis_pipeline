@@ -1015,34 +1015,69 @@ def find_consistency_limit(dir: str, set_type: Literal["edges", "var_names", "ob
         # L: slightly higher than the max observed value
         # a: the difference between the limit and the starting point
         # b: a small growth rate
-        p0 = [y_values[-1] + 0.05, y_values[-1] - y_values[0], 0.1]
-        
+        p0 = [min(y_values[-1] + 0.05, 0.9999), max(y_values[-1] - y_values[0], 0.0001), 0.1] # make sure no parameter is lower then 0, that would be out of bounds
+
         # Constraints: L must be between 0 and 1
         bounds = (0, [1.0, 1.0, np.inf])
         
+        # Flag to track if we use the model or fallback to mean
+        use_fallback = False
+        
         try:
-            params, _ = curve_fit(growth_model, n_values, y_values, p0=p0, bounds=bounds)
+            params, pcov = curve_fit(growth_model, n_values, y_values, p0=p0, bounds=bounds)
+            perr = np.sqrt(np.diag(pcov))
+
             L, a, b = params
+            L_se = perr[0]
+            
+            # Calculate R-squared
+            residuals = y_values - growth_model(n_values, *params)
+            ss_res = np.sum(residuals**2)
+            ss_tot = np.sum((y_values - np.mean(y_values))**2)
+            r_squared = 1 - (ss_res / ss_tot)
+
+            # --- FALLBACK CONDITION ---
+            # If R^2 is terrible OR the Standard Error is nonsensically large (e.g., > 1.0)
+            if r_squared < 0 or L_se > 1.0:
+                use_fallback = True
+            else:
+                print(f"Limit: {L:.4f} ± {L_se:.4f}")
+
         except Exception as e:
-            print(f"Fitting failed: {e}")
-            return None
+            print(f"Fitting failed: {e}. Falling back to mean.")
+            use_fallback = True
+
+        if use_fallback:
+            print("Model fit poor or singular. Falling back to mean calculation.")
+            L = np.mean(y_values)
+            # Standard Error of the Mean: std / sqrt(n)
+            L_se = np.std(y_values) / np.sqrt(len(y_values))
+            r_squared = 0.0 # By definition, a flat line at the mean has R^2 = 0
+            fit_type = "Mean (Fallback)"
+        else:
+            fit_type = "Exponential Fit"
 
         # --- Visualization ---
         plt.figure(figsize=(10, 6))
         plt.scatter(n_values, y_values, color='red', label='Observed Avg Jaccard')
+        plt.ylim(0, 1) # y scale from 0 to 1 (lowest to highest possible jaccard)
+        plt.xlabel("Number of Sets (n)")
+        plt.ylabel("Average pairwise Jaccard")
+        plt.grid(True, alpha = 0.3)
         
-        # Generate curve
-        n_smooth = np.linspace(2, len(avg_jaccards) + 5, 100)
-        plt.plot(n_smooth, growth_model(n_smooth, L, a, b), 'b--', 
-                label=f'Fit Curve (Limit L ≈ {L:.4f})')
+        # Only plot the dashed curve if the fit was successful
+        if not use_fallback:
+            n_smooth = np.linspace(2, len(avg_jaccards) + 5, 100)
+            plt.plot(n_smooth, growth_model(n_smooth, L, a, b), 'b--', 
+                    label=f'Fit Curve (L ≈ {L:.4f})')
         
-        plt.axhline(y=L, color='green', linestyle=':', label=f'Asymptote (L={L:.4f})')
-        plt.title('Consistency Limit: Average Pairwise Jaccard Convergence')
-        plt.xlabel('Number of Sets (n)')
-        plt.ylabel('Average Jaccard')
+        # Asymptote and Error Band
+        plt.axhline(y=L, color='green', linestyle=':', label=f'Limit ({L:.4f} ± {L_se:.4f})')
+        plt.axhspan(max(0, L - L_se), min(1, L + L_se), color='green', alpha=0.1) 
+        
         plt.legend()
-        plt.grid(True, alpha=0.3)
-        plt.savefig(os.path.join(dir, "jaccard_convergence.png"))
+        plt.title(f'Consistency Limit: {fit_type} (R²={r_squared:.3f})')
+        plt.savefig(os.path.join(dir, f"jaccard_convergence_{set_type}.png"))
 
         return L
 
@@ -1052,8 +1087,7 @@ def find_consistency_limit(dir: str, set_type: Literal["edges", "var_names", "ob
         avg_jaccard_list.append(avg_pairwise_jaccard(sets[:i+1])) # compare the first i+1 sets (but does not break at end)
 
     # find limit
-    limit = fit_jaccard_limit(avg_jaccard_list)
-    print(f"Limit: {limit}")
+    fit_jaccard_limit(avg_jaccard_list)
     
 
 def get_pairwise_ari(directory, resolution=0.5, n_neighbors=15, n_comps=50):
@@ -1164,10 +1198,16 @@ if __name__ == "__main__":
 
     print("starting script...")
 
-    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/subsampled/PDAC/jaccard_convergency_check"
-    dir2 = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/subsampled/Shin"
-    get_pairwise_ari(dir)
-    get_pairwise_ari(dir2)
+    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/isolated/output", set_type="var_names")    
+    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/isolated/control", set_type="var_names")  
+
+    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/pseudotime/output", set_type="var_names")    
+    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/pseudotime/control", set_type="var_names")    
+
+    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/GRN_edges/output", set_type="edges")
+    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/GRN_edges/control", set_type="edges")    
+
+    find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/jaccard_convergence_check", set_type="obs_names")
     
 
     

@@ -1326,9 +1326,106 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         output_path_list = reduce_data(output_path_list[0], input_prefix="CNV_inferred", layers_to_remove=["X", "X_scANVI_corrected_gene_values_cnv", "X_scVI_corrected"], save_output=True, verbose=True)
         """
 
-        subsample_cells(file_path=os.path.join(OUTPUT_STORAGE_DIR, "reduced", "reduced_shin.h5ad"), fraction=0.6, n_samples=10, output_dir=os.path.join(OUTPUT_STORAGE_DIR, "subsampled", "Shin"))
 
+        # --------------------------
+        # Error Propagation analysis
+        # --------------------------
+        # additional imports
+        import re
+        # global constant overrides
+        OUTPUT_STORAGE_DIR = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation"
 
+        # tree script
+        # inputs
+        r"""input_whole_ds = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/reduced/reduced_run0_PDAC_ductal_cell.h5ad"
+        input_subsample_dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/subsampled/PDAC/jaccard_convergency_check"
+        input_run_dir = None
+        #(there are no controls for the tree part since there is no issue beforehand -> subsample and run dir swap places)
+        # get whole dataset tree
+        get_phylogenetic_tree(input_data_file=input_whole_ds, cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state_inferred", transition_entropy_threshold=0.8, save_output=True, verbose=False, input_prefix="reduced", output_prefix="transition_clades_whole_ds") # output: transition_clades_whole_ds_run0_PDAC_ductal_cell.h5ad
+        # get 10x output files for tree
+        file_list = os.listdir(input_subsample_dir)
+        file_list.sort(key=lambda f: int(re.search(r'\d+', f).group())) # make sure input files are always sorted by the identifying number (otherwise tree_0 might become HVG_8 and loose its identify, invalidating the whole experiment)
+        for file in file_list:
+            file_id = int(re.search(r'\d+', file).group())
+            get_phylogenetic_tree(input_data_file=os.path.join(input_subsample_dir, file), cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state_inferred", transition_entropy_threshold=0.8, save_output=True, verbose=False, input_prefix="reduced", output_prefix=f"transition_clades_output_{file_id}") # output: transition_clades_output_{i}_sample{i}.h5ad
+        # get 10x subsamples from whole processed dataset
+        subsample_cells(file_path=os.path.join(OUTPUT_STORAGE_DIR, "tree", "transition_clades_whole_ds_run0_PDAC_ductal_cell.h5ad"), fraction=0.6, n_samples=10, output_dir=os.path.join(OUTPUT_STORAGE_DIR, "tree")) # output: sample_{i}.h5ad
+        # UMAPs for manually selecting start clades (to copy shin et al approach)
+        for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "tree")):
+            if "h5ad" not in file:
+                continue
+            output_path_list = isolate_and_HVGs(os.path.join(OUTPUT_STORAGE_DIR, "tree", file), main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, save_output=False, verbose=False, input_prefix="", output_prefix="")
+            cluster_and_plot(modules=["projections"],input_data_file=output_path_list[0], selection_criteria={}, obs_annotations=["cancer_state_inferred_tree", "cnv_clade"], layers=["log1p"], projection="UMAP", show=False, save_output=True, output_storage_subdir="clade_selection")
+        """
+
+        r"""# HVG / isolation script
+        input_whole_ds = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/tree/transition_clades_whole_ds_run0_PDAC_ductal_cell.h5ad"
+        input_subsample_dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/tree/subsampled"
+        input_run_dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/tree/output"
+        # get whole dataset HVG
+        isolate_and_HVGs(input_data_file=input_whole_ds, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree": ["transitional"]}, preservation_dict={"cnv_clade": [17, 24]}, save_output=True)
+        # get 10x output files for HVG
+        file_list = os.listdir(input_run_dir)
+        file_list.sort(key=lambda f: int(re.search(r'\d+', f).group()))
+        for file, clades in zip(file_list, [[4,7],[28,10],[13,25],[0,1],[1,3],[9,6],[19,23],[19,22],[0,6],[23,17]]):
+            file_id = int(re.search(r'\d+', file).group())
+            isolate_and_HVGs(input_data_file=os.path.join(input_run_dir, file), main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree": ["transitional"]}, preservation_dict={"cnv_clade": clades}, save_output=True)
+        # get 10x control files for HVG
+        file_list = os.listdir(input_subsample_dir)
+        file_list.sort(key=lambda f: int(re.search(r'\d+', f).group()))
+        for file in file_list: # here all UMAPS indicate clades 17 and 24 should be kept for the start of pseudotime
+            file_id = int(re.search(r'\d+', file).group())
+            isolate_and_HVGs(input_data_file=os.path.join(input_subsample_dir, file), main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree": ["transitional"]}, preservation_dict={"cnv_clade":[17,24]}, save_output=True)
+        # get 10x subsamples from whole processed dataset
+        whole_ds_file = [f for f in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "isolated")) if "whole_ds" in f]
+        subsample_cells(file_path=os.path.join(OUTPUT_STORAGE_DIR, "isolated", whole_ds_file[0]), fraction=0.6, n_samples=10, output_dir=os.path.join(OUTPUT_STORAGE_DIR, "isolated")) # output: sample_{i}.h5ad
+        """
+
+        r"""
+        # pseudotime / switches
+        input_whole_ds = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/isolated/isolated_whole_ds_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"
+        input_subsample_dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/isolated/subsampled"
+        input_run_dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/isolated/output"
+        # get whole dataset pseudotime
+        infer_pseudotime(input_data_file=input_whole_ds, origin_clade=17, flavor="monocle", layer="log1p", smoothe_expression=True, find_switches=True, bic_threshold=10, mean_threshold=0.5, save_output=True)
+        # get 10x output files for pseudotime
+        file_list = os.listdir(input_run_dir)
+        file_list.sort(key=lambda f: int(re.search(r'\d+', f).group()))
+        for file, clades in zip(file_list, [[4,7],[28,10],[13,25],[0,1],[1,3],[9,6],[19,23],[19,22],[0,6],[23,17]]) :
+            file_id = int(re.search(r'\d+', file).group())
+            infer_pseudotime(input_data_file=os.path.join(input_run_dir, file), origin_clade=clades[0], flavor="monocle", layer="log1p", smoothe_expression=True, find_switches=True, bic_threshold=10, mean_threshold=0.5, save_output=True)
+        # get 10x control files for pseudotime
+        file_list = os.listdir(input_subsample_dir)
+        file_list.sort(key=lambda f: int(re.search(r'\d+', f).group()))
+        for file in file_list:
+            file_id = int(re.search(r'\d+', file).group())
+            infer_pseudotime(input_data_file=os.path.join(input_subsample_dir, file), origin_clade=17, flavor="monocle", layer="log1p", smoothe_expression=True, find_switches=True, bic_threshold=10, mean_threshold=0.5, save_output=True)
+        # get 10x subsamples from whole processed dataset
+        whole_ds_file = [f for f in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "pseudotime")) if "whole_ds" in f]
+        subsample_cells(file_path=os.path.join(OUTPUT_STORAGE_DIR, "pseudotime", whole_ds_file[0]), fraction=0.6, n_samples=10, output_dir=os.path.join(OUTPUT_STORAGE_DIR, "pseudotime")) # output: sample_{i}.h5ad
+        """
+
+        
+        # GRN / edges
+        input_whole_ds = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/pseudotime/pseudotime_inferred_whole_ds_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"
+        input_subsample_dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/pseudotime/subsampled"
+        input_run_dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/pseudotime/output"
+        # get whole dataset GRN
+        infer_GRN_edges(input_data_file=input_whole_ds, tf_list_file=os.path.join(AUX_DATA_DIR, "annotations", "tf_symbols_list.txt"), save_output=True)
+        # get 10x output files for GRN
+        file_list = os.listdir(input_run_dir)
+        file_list.sort(key=lambda f: int(re.search(r'\d+', f).group()))
+        for file in file_list:
+            file_id = int(re.search(r'\d+', file).group())
+            infer_GRN_edges(input_data_file=os.path.join(input_run_dir, file), tf_list_file=os.path.join(AUX_DATA_DIR, "annotations", "tf_symbols_list.txt"), save_output=True)
+        # get 10x control files for GRN
+        file_list = os.listdir(input_subsample_dir)
+        file_list.sort(key=lambda f: int(re.search(r'\d+', f).group()))
+        for file in file_list:
+            file_id = int(re.search(r'\d+', file).group())
+            infer_GRN_edges(input_data_file=os.path.join(input_subsample_dir, file), tf_list_file=os.path.join(AUX_DATA_DIR, "annotations", "tf_symbols_list.txt"), save_output=True)
+        
 
         purge_tempfiles()
         sys.exit(0)

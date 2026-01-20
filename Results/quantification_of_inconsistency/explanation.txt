@@ -11,7 +11,15 @@
 - compare to perfect algo (independant of ss size and TS density) -> 0.42 jaccard similarity
 - compare to random algo (60%ss, 13.08% TS density (based on full dataset with no subsample, run0)) -> 0.0408 jaccard similarity
 
-- calculate percent performance (percentage of perfect algo) -> 22.5% of ideal performance
+- calculate percent performance (percentage of perfect algo) -> 22.5% of ideal performance (0.12 mean Jp from limit)
+
+
+
+
+also do this for downstream steps and compare limit with input from transition state algo to limit where the issue is not present (consistent TS cells)
+also note, that the same set of 10 60% subsamples (but in different order) yielded 0.16 mean Jp for TS instead of 0.12, and R^2 is only 0.5 so the limit should be interpreted as more of a ballpark (still accurate enough to judge it is far off from the optimal model)
+if they ask why not do higher n, then answer: because one run takes 18 hours and ballpark is good enough see THAT an error EXISTS
+
 
 
 (extra notes see paper / photo)
