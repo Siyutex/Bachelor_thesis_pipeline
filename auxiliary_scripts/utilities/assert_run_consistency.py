@@ -910,8 +910,9 @@ def evaluate_set_consistency(directory_path, set_type: Literal["edges", "var_nam
 
     def plot_grn_venn(sets_list, filenames):
         plt.figure(figsize=(10, 8))
+        plt.rcParams['font.size'] = 18
         # Create the Venn diagram
-        if len(sets_list) == 3:
+        if len(sets_list) == 3: # set font size so labels are legible in word
             v = venn3(sets_list, set_labels=('Run 1', 'Run 2', 'Run 3'))
         elif len(sets_list) == 2:
             v = venn2(sets_list, set_labels=('Run 1', 'Run 2'))
@@ -1209,7 +1210,9 @@ if __name__ == "__main__":
     #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/GRN_edges/output", set_type="edges")
     #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/GRN_edges/control", set_type="edges")    
 
-    find_consistency_limit(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/isolated/output", set_type="obs_names")
-    find_consistency_limit(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/jaccard_convergence_check", set_type="obs_names")
+    #find_consistency_limit(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/isolated/output", set_type="obs_names")
+    #find_consistency_limit(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/jaccard_convergence_check", set_type="obs_names")
 
-    
+    evaluate_set_consistency(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated", set_type="obs_names")
+    evaluate_set_consistency(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime", set_type="var_names")
+    evaluate_set_consistency(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/GRN_edges", set_type="edges")
