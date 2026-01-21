@@ -1061,8 +1061,6 @@ def find_consistency_limit(dir: str, set_type: Literal["edges", "var_names", "ob
         plt.figure(figsize=(10, 6))
         plt.scatter(n_values, y_values, color='red', label='Observed Avg Jaccard')
         plt.ylim(0, 1) # y scale from 0 to 1 (lowest to highest possible jaccard)
-        plt.xlabel("Number of Sets (n)")
-        plt.ylabel("Average pairwise Jaccard")
         plt.grid(True, alpha = 0.3)
         
         # Only plot the dashed curve if the fit was successful
@@ -1075,8 +1073,12 @@ def find_consistency_limit(dir: str, set_type: Literal["edges", "var_names", "ob
         plt.axhline(y=L, color='green', linestyle=':', label=f'Limit ({L:.4f} ± {L_se:.4f})')
         plt.axhspan(max(0, L - L_se), min(1, L + L_se), color='green', alpha=0.1) 
         
-        plt.legend()
-        plt.title(f'Consistency Limit: {fit_type} (R²={r_squared:.3f})')
+        # Annotations
+        plt.xlabel("Number of Sets (n)", fontsize=15)
+        plt.ylabel("Average pairwise Jaccard", fontsize=15)
+        plt.title(f'Consistency Limit: {fit_type} (R²={r_squared:.3f})', fontsize=20)
+        plt.legend(fontsize=15)
+
         plt.savefig(os.path.join(dir, f"jaccard_convergence_{set_type}.png"))
 
         return L
@@ -1202,11 +1204,12 @@ if __name__ == "__main__":
     #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/isolated/control", set_type="var_names")  
 
     #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/pseudotime/output", set_type="var_names")    
-    # find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/pseudotime/control", set_type="var_names")    
+    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/pseudotime/control", set_type="var_names")    
 
     #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/GRN_edges/output", set_type="edges")
-    find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/GRN_edges/control", set_type="edges")    
+    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/GRN_edges/control", set_type="edges")    
 
-    
+    find_consistency_limit(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/isolated/output", set_type="obs_names")
+    find_consistency_limit(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/jaccard_convergence_check", set_type="obs_names")
 
     

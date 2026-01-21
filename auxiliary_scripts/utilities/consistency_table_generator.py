@@ -79,4 +79,4 @@ plt.tight_layout()
 plt.savefig('consistency_summary_table.png', dpi=600, bbox_inches='tight')
 
 # Also save CSV for user
-df.to_csv('consistency_summary_table.csv', index=False)
+# df.to_csv('consistency_summary_table.csv', index=False)
