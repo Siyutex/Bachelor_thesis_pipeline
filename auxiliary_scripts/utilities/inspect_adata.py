@@ -1,3 +1,4 @@
+import os
 import scanpy as sc
 import numpy as np
 import scanpy as sc
@@ -122,17 +123,15 @@ def calculate_hopkins_stable(adata, n_comps=50, m=1000, iterations=10):
 if __name__ == "__main__":
 
     layer_to_check = None # check library sizes for this layer
-    file_locations = [
-    r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/reduced/reduced_run0_PDAC_ductal_cell.h5ad",
-    r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/reduced/reduced_shin.h5ad"
-    ]
+    dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/subsampled/PDAC/original_subsamples"
 
     obs_dict = {
         "cancer_state_inferred_tree": ["transitional"],
     }
 
-    for path in file_locations:
-        calculate_hopkins_stable(path)
+    for file in os.listdir(dir):
+        path = os.path.join(dir, file)    
+        check_n_obs(sc.read_h5ad(path))
 
         
 

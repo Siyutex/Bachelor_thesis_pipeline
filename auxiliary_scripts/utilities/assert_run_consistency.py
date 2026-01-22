@@ -1213,6 +1213,4 @@ if __name__ == "__main__":
     #find_consistency_limit(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/isolated/output", set_type="obs_names")
     #find_consistency_limit(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/jaccard_convergence_check", set_type="obs_names")
 
-    evaluate_set_consistency(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated", set_type="obs_names")
-    evaluate_set_consistency(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/pseudotime", set_type="var_names")
-    evaluate_set_consistency(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/GRN_edges", set_type="edges")
+    evaluate_set_consistency(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/cancer_metric_test", set_type="obs_names")

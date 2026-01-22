@@ -1,0 +1,6 @@
+Run_0 vs Run_1: 0.2615
+Run_0 vs Run_2: 0.2526
+Run_1 vs Run_2: 0.3211
+
+--- Global Metrics ---
+Global Jaccard (Intersection of all / Union of all): 0.1224
