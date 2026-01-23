@@ -1333,7 +1333,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         # additional imports
         import re
         # global constant overrides
-        OUTPUT_STORAGE_DIR = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation"
+        # OUTPUT_STORAGE_DIR = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation"
 
         # tree script
         # inputs
@@ -1406,7 +1406,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         subsample_cells(file_path=os.path.join(OUTPUT_STORAGE_DIR, "pseudotime", whole_ds_file[0]), fraction=0.6, n_samples=10, output_dir=os.path.join(OUTPUT_STORAGE_DIR, "pseudotime")) # output: sample_{i}.h5ad
         """
 
-        
+        r"""
         # GRN / edges
         input_whole_ds = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/pseudotime/pseudotime_inferred_whole_ds_run0_PDAC_ductal_cell_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"
         input_subsample_dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/pseudotime/subsampled"
@@ -1425,6 +1425,18 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         for file in file_list:
             file_id = int(re.search(r'\d+', file).group())
             infer_GRN_edges(input_data_file=os.path.join(input_subsample_dir, file), tf_list_file=os.path.join(AUX_DATA_DIR, "annotations", "tf_symbols_list.txt"), save_output=True)
+        """
+
+
+        for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "subsampled", "PDAC", "jaccard_convergency_check")):
+            output_path_list = get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "subsampled","PDAC", "jaccard_convergency_check", file), cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state_inferred_scMF", transition_entropy_threshold=0.8, save_output=True, verbose=True, output_prefix="transition_clades_scMF")
+            for file in output_path_list:
+                if ".nwk" in file:
+                    tree_file = file
+                elif ".h5ad" in file:
+                    h5ad_file = file
+            output_path_list = isolate_and_HVGs(h5ad_file, main_layer="X_scANVI_corrected", add_log1p=True, max_considered_genes=3000, isolation_dict={"cancer_state_inferred_tree":["transitional"]}, preservation_dict={}, save_output=True, verbose=True)
+
         
 
         purge_tempfiles()

@@ -15,13 +15,13 @@ data = {
     ],
     "Optimal Model ($J_p$)": [0.4285, 1.0000, 1.0000, 1.0000],
     "Sampling Limit ($L \pm SE, R^2$)": [
-        "0.1400 ± 0.0032, 0.720", # Avg of the two runs for TS
+        "0.1632 ± 0.0041, 0.470", # Avg of the two runs for TS
         "0.8569 ± 0.0038, 0.000",
         "0.9597 ± 0.0008, 0.000",
         "0.5676 ± 0.0010, 0.966"
     ],
     "Pipeline Limit ($L \pm SE, R^2$)": [
-        "0.1400 ± 0.0032, 0.720", # Same as Sampling for TS
+        "0.1632 ± 0.0041, 0.470", # Same as Sampling for TS
         "0.6264 ± 0.0069, 0.404",
         "0.5718 ± 0.0059, 0.903",
         "0.0280 ± 0.0016, 0.000"

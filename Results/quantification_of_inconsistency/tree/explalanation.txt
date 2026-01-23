@@ -1,0 +1,3 @@
+new = from error propagation tree output files (nc clades 4 and 7 kept)
+old = from isolated jaccard convergence check files (std settings)
+scMF = from isoalted jaccard convergence check scMF files (scMF instead of CSI)
