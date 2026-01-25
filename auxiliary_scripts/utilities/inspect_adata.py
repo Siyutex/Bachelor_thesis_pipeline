@@ -123,10 +123,10 @@ def calculate_hopkins_stable(adata, n_comps=50, m=1000, iterations=10):
 if __name__ == "__main__":
 
     layer_to_check = None # check library sizes for this layer
-    check_n_obs(sc.read_h5ad(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/isolated/output/isolated_output_0_sample_0_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"))
-    check_n_obs(sc.read_h5ad(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/jaccard_convergence_check/isolated_jaccard_convergence_sample_0_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"))
-
-        
+    check_n_obs(sc.read_h5ad(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/cancer_metric_test/isolated_scMF_sample_0_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"))
+    check_n_obs(sc.read_h5ad(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/cancer_metric_test/isolated_scMF_sample_1_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"))
+    check_n_obs(sc.read_h5ad(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/cancer_metric_test/isolated_scMF_sample_2_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"))
+     
 
 
 
