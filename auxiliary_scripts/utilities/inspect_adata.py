@@ -6,6 +6,7 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.utils import resample
 from sklearn.preprocessing import RobustScaler
 import helper_functions as hf
+from typing import Literal
 
 def check_lib_size(adata, layer_to_check):
     if layer_to_check in adata.layers.keys():
@@ -30,12 +31,26 @@ def show_annotation(adata, extract):
         print(f"Type of entries in {extract}: {type(adata.var[extract][0])}")
         print(f"First few entries of {extract}: \n{adata.var[extract][:5]}")
 
+    # also show all unqiue entries of the column if less than 30
+    if extract in adata.obs.keys():
+        if len(adata.obs[extract].unique()) < 30:
+            print(f"Unique entries in {extract}: \n{adata.obs[extract].unique()}")
+    elif extract in adata.var.keys():
+        if len(adata.var[extract].unique()) < 30:
+            print(f"Unique entries in {extract}: \n{adata.var[extract].unique()}")
 
-def check_n_obs(adata):
-    # check how many observations there are
-    print(f"Number of observations in X / layers: {adata.n_obs}")
-    for key in adata.obsm.keys():
-        print(f"Number of observations in {key}: {adata.obsm[key].shape[0]}")
+
+def check_n_obs_var(adata, entry_to_check: Literal["obs", "var"]):
+    if entry_to_check == "obs":
+        # check how many observations there are
+        print(f"Number of observations in X / layers: {adata.n_obs}")
+        for key in adata.obsm.keys():
+            print(f"Number of observations in {key}: {adata.obsm[key].shape[0]}")
+    elif entry_to_check == "var":
+        # check how many variables there are
+        print(f"Number of variables in X / layers: {adata.n_vars}")
+        for key in adata.layers.keys():
+            print(f"Number of variables in {key}: {adata.layers[key].shape[1]}")
 
 def check_obs_percentage(adata, obs_dict):
     """
@@ -55,6 +70,8 @@ def calculate_hopkins_stable(adata, n_comps=50, m=1000, iterations=10):
     
     H ~ 1.0 : Highly Clustered (Low Noise/Clear States)
     H ~ 0.5 : Random/Uniform (High Noise/Blurred Manifold)
+
+    Always uses "X_scANVI_corrected" layer / obsm to calculate distances
     
     Parameters:
     -----------
@@ -68,7 +85,6 @@ def calculate_hopkins_stable(adata, n_comps=50, m=1000, iterations=10):
         Number of resamplings to perform for a stable estimate.
     """
 
-    adata = sc.read_h5ad(path)
     adata = hf.matrix_to_anndata(adata, matrix_key="X_scANVI_corrected").copy()
     sc.pp.pca(adata, n_comps=n_comps, svd_solver="arpack")
     
@@ -123,10 +139,16 @@ def calculate_hopkins_stable(adata, n_comps=50, m=1000, iterations=10):
 if __name__ == "__main__":
 
     layer_to_check = None # check library sizes for this layer
-    check_n_obs(sc.read_h5ad(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/cancer_metric_test/isolated_scMF_sample_0_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"))
-    check_n_obs(sc.read_h5ad(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/cancer_metric_test/isolated_scMF_sample_1_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"))
-    check_n_obs(sc.read_h5ad(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/cancer_metric_test/isolated_scMF_sample_2_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"))
-     
 
+    dir_c = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/OG_data/manual_cell_IDs_NCBI/PDAC_cancerous"
+    file_list = [os.path.join(dir_c, file) for file in os.listdir(dir_c)]
+    dir_nc = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/OG_data/manual_cell_IDs_NCBI/PDAC_non_cancerous"
+    new_list = [os.path.join(dir_nc, file) for file in os.listdir(dir_nc)]
+    for item in new_list:
+        file_list.append(item)
+
+    for file in file_list:
+        adata = sc.read_h5ad(file)
+        check_n_obs_var(adata, "obs")
 
 

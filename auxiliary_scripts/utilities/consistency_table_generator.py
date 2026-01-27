@@ -15,29 +15,29 @@ data = {
     ],
     "Optimal Model ($J_p$)": [0.4285, 1.0000, 1.0000, 1.0000],
     "Sampling Limit ($L \pm SE, R^2$)": [
-        "0.1632 ± 0.0041, 0.470", # Avg of the two runs for TS
-        "0.8569 ± 0.0038, 0.000",
-        "0.9597 ± 0.0008, 0.000",
-        "0.5676 ± 0.0010, 0.966"
+        "0.1212 ± 0.0064, 0.000", # Avg of the two runs for TS
+        "0.9051 ± 0.0009, 0.000",
+        "0.9349 ± 0.0076, 0.000",
+        "0.6062 ± 0.0020, 0.000"
     ],
     "Pipeline Limit ($L \pm SE, R^2$)": [
-        "0.1632 ± 0.0041, 0.470", # Same as Sampling for TS
-        "0.6264 ± 0.0069, 0.404",
-        "0.5718 ± 0.0059, 0.903",
-        "0.0280 ± 0.0016, 0.000"
+        "0.1212 ± 0.0064, 0.000", # Same as Sampling for TS
+        "0.5677 ± 0.0076, 0.000",
+        "0.5464 ± 0.0046, 0.254",
+        "0.0292 ± 0.0003, 0.000"
     ],
     "Delta (S-P)": [
         0.0000,
-        0.8569 - 0.6264,
-        0.9597 - 0.5718,
-        0.5676 - 0.0280
+        0.9051 - 0.5677,
+        0.9349 - 0.5464,
+        0.6062 - 0.0292
     ],
     # Random models caclulcation:
     # TS: as done on paper sampling = 60% of cells, then pick 10% of cells as Ts (Bcs 10 % is TS frequency in full dataset)
     # HVG: 3000/36000 cells are HVGs
     # Switch: in sample limit samples, we have 2902.7 swtiches out of 3000 total genes on average
     # GRN: 2902 nodes -> square for potential edges 1/potential edges = chance to pick, sqaure again for chace to pick twice -> basically 0 overlap
-    "Random Model ($J_p$)": [0.0309, 0.0035, 0.8799, 0.0000]
+    "Random Model ($J_p$)": [0.0309, 0.0035, 0.9237, 0.0000]
 }
 
 df = pd.DataFrame(data)

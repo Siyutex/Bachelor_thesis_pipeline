@@ -1201,17 +1201,15 @@ if __name__ == "__main__":
 
     print("starting script...")
 
-    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/isolated/output", set_type="var_names")    
-    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/isolated/control", set_type="var_names")  
+    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/isolated/output", set_type="var_names")    
+    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/isolated/control", set_type="var_names")  
 
-    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/pseudotime/output", set_type="var_names")    
-    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/pseudotime/control", set_type="var_names")    
+    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/pseudotime/output", set_type="var_names")    
+    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/pseudotime/control", set_type="var_names")    
 
-    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/GRN_edges/output", set_type="edges")
-    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/GRN_edges/control", set_type="edges")    
+    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/GRN_edges/output", set_type="edges")
+    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/GRN_edges/control", set_type="edges")    
 
-    #find_consistency_limit(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation/isolated/output", set_type="obs_names")
-    #find_consistency_limit(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/isolated/jaccard_convergence_check", set_type="obs_names")
+    #find_consistency_limit(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/isolated/output", set_type="obs_names")
 
-    evaluate_set_consistency(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/temporary_isiadfka", set_type="obs_names")
     
