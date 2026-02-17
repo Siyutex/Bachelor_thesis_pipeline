@@ -1427,7 +1427,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             infer_GRN_edges(input_data_file=os.path.join(input_subsample_dir, file), tf_list_file=os.path.join(AUX_DATA_DIR, "annotations", "tf_symbols_list.txt"), save_output=True)
         """
 
-
+        r"""
         # ----------------------
         # Error Propagation Shin
         # ----------------------
@@ -1436,7 +1436,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         import re
         # global constant overrides
         OUTPUT_STORAGE_DIR = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin"
-
+        """
         r"""
         # tree script
         # inputs
@@ -1509,12 +1509,12 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         subsample_cells(file_path=os.path.join(OUTPUT_STORAGE_DIR, "pseudotime", whole_ds_file[0]), fraction=0.6, n_samples=10, output_dir=os.path.join(OUTPUT_STORAGE_DIR, "pseudotime")) # output: sample_{i}.h5ad
         """
 
-        
+        r"""
         # GRN / edges
         input_whole_ds = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/pseudotime/pseudotime_inferred_whole_ds_shin_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"
         input_subsample_dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/pseudotime/subsampled"
         input_run_dir = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/pseudotime/output"
-        r"""
+        
         # get whole dataset GRN
         infer_GRN_edges(input_data_file=input_whole_ds, tf_list_file=os.path.join(AUX_DATA_DIR, "annotations", "tf_symbols_list.txt"), save_output=True)
         # get 10x output files for GRN
@@ -1524,6 +1524,7 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
             file_id = int(re.search(r'\d+', file).group())
             infer_GRN_edges(input_data_file=os.path.join(input_run_dir, file), tf_list_file=os.path.join(AUX_DATA_DIR, "annotations", "tf_symbols_list.txt"), save_output=True)
         """
+        r"""
         # script ran out of time here -> finish last sample, then continue with control (9 samples + wds took 15 hours -> 16 for second half)
         output_nine_file = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/pseudotime/output/pseudotime_inferred_output_9_sample_9_HVG_X_is_X_scANVI_corrected_cancer_state_inferred_tree_is_['transitional'].h5ad"
         infer_GRN_edges(input_data_file=output_nine_file, tf_list_file=os.path.join(AUX_DATA_DIR, "annotations", "tf_symbols_list.txt"), save_output=True)
@@ -1534,7 +1535,13 @@ if __name__ == "__main__": # ensures this code runs only when this script is exe
         for file in file_list:
             file_id = int(re.search(r'\d+', file).group())
             infer_GRN_edges(input_data_file=os.path.join(input_subsample_dir, file), tf_list_file=os.path.join(AUX_DATA_DIR, "annotations", "tf_symbols_list.txt"), save_output=True)
-        
+        """
+
+        for file in os.listdir(os.path.join(OUTPUT_STORAGE_DIR, "subsampled", "Shin")):
+            output_path_list = get_phylogenetic_tree(os.path.join(OUTPUT_STORAGE_DIR, "subsampled", "Shin", file), cnv_score_matrix="X_scANVI_corrected_cnv", distance_metric="euclidean", n_clades=30, grouping_metric="cancer_state_inferred", transition_entropy_threshold=0.8, save_output=False, verbose=True, output_prefix="RF_Shin")
+            for output_file in output_path_list:
+                if ".nwk" in output_file:
+                    shutil.copy(output_file, os.path.join(OUTPUT_STORAGE_DIR, "tree", "tree_topology_robinson_foulds", "Shin", os.path.basename(output_file)))
 
         purge_tempfiles()
         sys.exit(0)

@@ -19,6 +19,8 @@ from typing import Literal
 from scipy.optimize import curve_fit
 from sklearn.metrics import adjusted_rand_score
 from itertools import combinations
+from Bio import Phylo
+import copy
 
 
 def load_obsname_dict(file_list: list[str]):
@@ -1091,6 +1093,172 @@ def find_consistency_limit(dir: str, set_type: Literal["edges", "var_names", "ob
 
     # find limit
     fit_jaccard_limit(avg_jaccard_list)
+
+
+def find_tree_topology_consistency(directory: str):
+    """
+    Calculates the average pairwise Robinson-Foulds distance between Newick files.
+    Prunes trees to the intersection of their leaf nodes before comparison.
+    """
+    
+    def get_rf_distance(tree1, tree2):
+        """
+        Calculates normalized Robinson-Foulds distance between two trees.
+        RF = (number of splits in T1 not in T2) + (number of splits in T2 not in T1)
+        Normalized by 2 * (n_leaves - 3)
+        """
+        print("Computing Robinson-Foulds Distance...")
+
+        # Get sets of leaves
+        leaves1 = set(t.name for t in tree1.get_terminals())
+        leaves2 = set(t.name for t in tree2.get_terminals())
+        common_leaves = leaves1.intersection(leaves2)
+        
+        if len(common_leaves) < 4:
+            return None # RF is not meaningful for < 4 leaves
+        
+        # Prune trees to common leaves to make them comparable
+        # We use deepcopies to avoid destroying the original objects in the list
+        t1_pruned = copy.deepcopy(tree1)
+        t2_pruned = copy.deepcopy(tree2)
+        
+        # remove non overlapping leaves (might leave ghost nodes that have no leaves)
+        for tree in [t1_pruned, t2_pruned]:
+            # Biopython pruning: identify nodes to keep, collapse the rest
+            for leaf in tree.get_terminals():
+                if leaf.name not in common_leaves:
+                    tree.prune(leaf)
+
+        # NEW LOGIC (might stop working if this is kept) -------- #
+        for tree in [t1_pruned, t2_pruned]:
+            all_clades = list(tree.find_clades(terminal=False))
+            for node in all_clades: # find all internal nodes
+                if len(set([t.name for t in node.get_terminals()]).intersection(common_leaves)) == 0:
+                    tree.prune(node)
+
+        # now we should have a tree that only has
+        # - internal nodes with 2 children
+        # - internal nodes with 1 child that still have descendants in common_leaves (in this case a unary parent and its child have the same leaf set -> set(frozenset) skips the duplicate -> the unary node "stops existing")
+        # - leaves in common_leaves
+
+        # there should not be
+        # - terminal nodes not in common_leaves
+        # - "zombie nodes" that have no descendants but are themsleves not in common_leaves (used to be internal nodes)
+        # ------------------------------------------------------- #
+        
+        # Calculate RF using Biopython's internal comparison if available 
+        # or manual split comparison. Note: standard RF is usually implemented 
+        # via external tools like ete3 or DendroPy, but here is the logic:
+        
+        def get_splits(tree):
+            terminals = sorted([t.name for t in tree.get_terminals()])
+            splits = set()
+            for clade in tree.find_clades(terminal=False):
+                clade_terminals = frozenset(sorted([t.name for t in clade.get_terminals()]))
+                # Ignore the trivial splits (individual leaves or the whole tree)
+                if 1 < len(clade_terminals) < len(terminals):
+                    splits.add(clade_terminals) # adding a frozenset to aset yields a set of frozensets so individual additions can still be distinguished
+            return splits
+
+        s1 = get_splits(t1_pruned)
+        s2 = get_splits(t2_pruned)
+        
+        rf_raw = len(s1.symmetric_difference(s2))
+        max_rf = 2 * (len(common_leaves) - 3)
+        
+        return rf_raw / max_rf if max_rf > 0 else 0
+
+    # Load all trees
+    files = [f for f in os.listdir(directory) if f.endswith(".nwk") or f.endswith(".newick")]
+    trees = []
+    for file in files:
+        try:
+            tree = Phylo.read(os.path.join(directory, file), "newick")
+            trees.append(tree)
+            print(f"Loaded tree with {len(tree.get_terminals())} leaves from {file}")
+        except Exception as e:
+            print(f"Error loading {file}: {e}")
+
+    def avg_pairwise_rf(tree_list):
+        rf_scores = []
+        for i in range(len(tree_list)):
+            for j in range(i + 1, len(tree_list)):
+                dist = get_rf_distance(tree_list[i], tree_list[j])
+                if dist is not None:
+                    rf_scores.append(dist)
+        
+        return sum(rf_scores) / len(rf_scores) if rf_scores else 0
+
+    # Calculate convergence
+    avg_rf_list = []
+    for i in range(1, len(trees)):
+        avg_rf_list.append(avg_pairwise_rf(trees[:i+1]))
+
+    # --- Fitting Logic ---
+    def fit_limit(y_values):
+        n_values = np.arange(2, len(y_values) + 2)
+        
+        def growth_model(n, L, a, b):
+            return L - a * np.exp(-b * n)
+
+        p0 = [y_values[-1], 0.1, 0.1]
+        bounds = (0, [1.0, 1.0, np.inf])
+        
+        try:
+            params, pcov = curve_fit(growth_model, n_values, y_values, p0=p0, bounds=bounds)
+            L,a,b = params
+            L_se = np.sqrt(np.diag(pcov))[0]
+            fit_type = "Exponential Fit"
+
+            # Calculate R-squared
+            residuals = y_values - growth_model(n_values, *params)
+            ss_res = np.sum(residuals**2)
+            ss_tot = np.sum((y_values - np.mean(y_values))**2)
+            r_squared = 1 - (ss_res / ss_tot)
+
+            # --- FALLBACK CONDITION ---
+            # If R^2 is terrible OR the Standard Error is nonsensically large (e.g., > 1.0)
+            if r_squared < 0.05 or L_se > 1.0:
+                use_fallback = True
+        except:
+            use_fallback = True
+        
+        if use_fallback:
+            L = np.mean(y_values)
+            L_se = np.std(y_values) / np.sqrt(len(y_values))
+            fit_type = "Mean (Fallback)"
+            r_squared = 0.0 # by definition
+            
+        print(f"Topology RF Limit: {L:.4f} ± {L_se:.4f} ({fit_type})")
+        
+        # Plotting
+        # --- Visualization ---
+        plt.figure(figsize=(10, 6))
+        plt.scatter(n_values, y_values, color='red', label='Observed Avg RF metric')
+        plt.ylim(0, 1) # y scale from 0 to 1 (lowest to highest possible jaccard)
+        plt.grid(True, alpha = 0.3)
+        
+        # Only plot the dashed curve if the fit was successful
+        if fit_type == "Exponential Fit":
+            n_smooth = np.linspace(2, len(avg_rf_list) + 5, 100)
+            plt.plot(n_smooth, growth_model(n_smooth, L, a, b), 'b--', 
+                    label=f'Fit Curve (L ≈ {L:.4f})')
+        
+        # Asymptote and Error Band
+        plt.axhline(y=L, color='green', linestyle=':', label=f'Limit ({L:.4f} ± {L_se:.4f})')
+        plt.axhspan(max(0, L - L_se), min(1, L + L_se), color='green', alpha=0.1) 
+        
+        # Annotations
+        plt.xlabel("Number of Sets (n)", fontsize=15)
+        plt.ylabel("Average pairwise Robinson Foulds metric", fontsize=15)
+        plt.title(f'Limit: {fit_type} (R²={r_squared:.3f})', fontsize=20)
+        plt.legend(fontsize=15)
+
+        plt.savefig(os.path.join(directory, f"RF_convergence.png"))
+        
+        return L
+
+    return fit_limit(avg_rf_list)
     
 
 def get_pairwise_ari(directory, resolution=0.5, n_neighbors=15, n_comps=50):
@@ -1201,15 +1369,6 @@ if __name__ == "__main__":
 
     print("starting script...")
 
-    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/isolated/output", set_type="var_names")    
-    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/isolated/control", set_type="var_names")  
-
-    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/pseudotime/output", set_type="var_names")    
-    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/pseudotime/control", set_type="var_names")    
-
-    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/GRN_edges/output", set_type="edges")
-    #find_consistency_limit(dir=r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/GRN_edges/control", set_type="edges")    
-
-    #find_consistency_limit(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/Error_propagation_shin/isolated/output", set_type="obs_names")
+    find_tree_topology_consistency(r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/output_storage/tree/tree_topology_robinson_foulds/Shin")
 
     

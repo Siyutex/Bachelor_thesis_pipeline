@@ -140,15 +140,15 @@ if __name__ == "__main__":
 
     layer_to_check = None # check library sizes for this layer
 
-    dir_c = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/OG_data/manual_cell_IDs_NCBI/PDAC_cancerous"
+    dir_c = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/Shin_et_al./shin_cancerous"
     file_list = [os.path.join(dir_c, file) for file in os.listdir(dir_c)]
-    dir_nc = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/OG_data/manual_cell_IDs_NCBI/PDAC_non_cancerous"
+    dir_nc = r"/proj/ml_grn/project_julian/Bachelor_thesis_pipeline/Data/Shin_et_al./shin_non_cancerous"
     new_list = [os.path.join(dir_nc, file) for file in os.listdir(dir_nc)]
     for item in new_list:
         file_list.append(item)
 
     for file in file_list:
-        adata = sc.read_h5ad(file)
+        adata = sc.read_10x_h5(file)
         check_n_obs_var(adata, "obs")
 
 
