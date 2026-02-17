@@ -1,0 +1,16 @@
+the following steps should be taken after creating the miniconda3 environment from environment.yml to recreate the exact environment used to run the pipeline
+(this is necessary because of external dependancies and version conflicts)
+
+- (if running on windows) wsl with ubuntu distribution (otherwise any Linux installation should suffice)
+- sudo apt full-upgrade
+- sudo apt install build-essential (has gcc and other essential tools)
+- install miniconda3 according to https://www.anaconda.com/docs/getting-started/miniconda/install#linux-2
+- manually install pymonocle with pip install git+https://github.com/bioturing/py-monocle.git@a0d77b63309af6939cb0a8799471e543fa328ac8
+	(will downgrade numpy, because it says it requires numpy < 2.0)
+- upgrade numpy to 2.3.4 again pip install numpy==2.3.4 (scikit-bio requires it > 2.0, 2.3.4 is the version in the environment.yml) (this does not cause any issues with pymonocle)
+- pip install scMalignantFinder --no-deps (if run without --no-deps it will build dependencies from source and break because of a cython issue with scikit learn)
+- pip install pyscenic (with dependencies)
+- pip install squidpy (with dependencies)
+- pip unistall arboreto
+- pip install arboreto (to fix dependency issues)
+- pip install matplotlib-venn --no-deps (requires mpl, np and sp, which we have at this point)
